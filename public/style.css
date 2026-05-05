@@ -148,6 +148,7 @@ body {
 .badge-ping    { background: rgba(30,58,95,0.8);  color: #93c5fd; border: 1px solid rgba(59,130,246,0.25); }
 .badge-http    { background: rgba(46,16,101,0.8); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.25); }
 .badge-service { background: rgba(69,26,3,0.8);  color: #fcd34d; border: 1px solid rgba(245,158,11,0.25); }
+.badge-cloud   { background: rgba(6,36,52,0.8);  color: #67e8f9; border: 1px solid rgba(6,182,212,0.25); }
 
 .device-card-body { padding: 14px 16px; }
 

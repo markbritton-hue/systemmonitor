@@ -72,7 +72,7 @@
 let prevStatus = {};
 
 function typeBadge(type) {
-  const map = { ping: ['PING','badge-ping'], http: ['HTTP','badge-http'], service: ['API','badge-service'] };
+  const map = { ping: ['PING','badge-ping'], http: ['HTTP','badge-http'], service: ['API','badge-service'], cloud: ['CLOUD','badge-cloud'] };
   const [label, cls] = map[type] || ['?','badge-ping'];
   return `<span class="type-badge ${cls}">${label}</span>`;
 }

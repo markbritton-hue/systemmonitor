@@ -43,6 +43,7 @@
     .badge-ping    { background: rgba(30,58,95,0.8);  color: #93c5fd; border: 1px solid rgba(59,130,246,0.25); }
     .badge-http    { background: rgba(46,16,101,0.8); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.25); }
     .badge-service { background: rgba(69,26,3,0.8);  color: #fcd34d; border: 1px solid rgba(245,158,11,0.25); }
+    .badge-cloud   { background: rgba(6,36,52,0.8);  color: #67e8f9; border: 1px solid rgba(6,182,212,0.25); }
     .device-card-body { padding: 14px 16px; }
     .status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
     .status-dot { width: 12px; height: 12px; border-radius: 50%; background: #64748b; flex-shrink: 0; }
@@ -138,7 +139,7 @@ function formatMs(ms) {
   return ms < 1000 ? ms + 'ms' : (ms/1000).toFixed(1) + 's';
 }
 function typeBadge(type) {
-  const map = { ping:['PING','badge-ping'], http:['HTTP','badge-http'], service:['API','badge-service'] };
+  const map = { ping:['PING','badge-ping'], http:['HTTP','badge-http'], service:['API','badge-service'], cloud:['CLOUD','badge-cloud'] };
   const [label,cls] = map[type] || ['?','badge-ping'];
   return `<span class="type-badge ${cls}">${label}</span>`;
 }
@@ -201,13 +202,40 @@ function updateAgentBadge(devices) {
   }
 }
 
+async function writeCloudHeartbeat() {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/devices`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        id: 'cloud-dashboard',
+        name: 'Cloud Dashboard',
+        type: 'cloud',
+        host: 'GitHub Pages',
+        status: 'up',
+        enabled: true,
+        message: 'Cloud dashboard active',
+        agent_heartbeat: new Date().toISOString(),
+        history: [],
+      }),
+    });
+  } catch (_) {}
+}
+
 async function loadDevices() {
+  writeCloudHeartbeat();
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/devices?select=*`, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
     });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    const devices = await res.json();
+    const all = await res.json();
+    const devices = all.filter(d => d.id !== 'cloud-dashboard');
 
     const up      = devices.filter(d=>d.status==='up').length;
     const down    = devices.filter(d=>d.status==='down').length;

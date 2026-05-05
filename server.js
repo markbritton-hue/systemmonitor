@@ -198,6 +198,50 @@ async function sendNtfy(deviceId, newStatus) {
   }
 }
 
+// ── Cloud heartbeat check ─────────────────────────────────────────────────────
+
+const CLOUD_HB_ID = 'cloud-dashboard';
+const CLOUD_HB_MAX_MS = 60 * 60 * 1000; // 1 hour
+
+async function checkCloudHeartbeat() {
+  const settings = loadSettings();
+  const { supabaseUrl, supabaseKey } = settings;
+  if (!supabaseUrl || !supabaseKey) return;
+  try {
+    const res = await axios.get(
+      `${supabaseUrl}/rest/v1/devices?id=eq.${CLOUD_HB_ID}&select=agent_heartbeat`,
+      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+    );
+    const rows = res.data;
+    const prev = statusMap[CLOUD_HB_ID];
+    const history = prev ? [...prev.history] : [];
+    let newStatus, message;
+    if (!rows || !rows.length || !rows[0].agent_heartbeat) {
+      newStatus = 'unknown';
+      message = 'No heartbeat received yet';
+    } else {
+      const ageMs = Date.now() - new Date(rows[0].agent_heartbeat).getTime();
+      const ageMin = Math.round(ageMs / 60000);
+      newStatus = ageMs < CLOUD_HB_MAX_MS ? 'up' : 'down';
+      message = newStatus === 'up' ? `Last seen ${ageMin}m ago` : `No heartbeat for ${ageMin}m`;
+    }
+    history.push(newStatus === 'up');
+    if (history.length > 10) history.shift();
+    const nowIso = new Date().toISOString();
+    statusMap[CLOUD_HB_ID] = {
+      id: CLOUD_HB_ID,
+      status: newStatus,
+      responseTime: null,
+      lastCheck: nowIso,
+      lastChange: (prev && prev.status !== newStatus) ? nowIso : (prev ? prev.lastChange : nowIso),
+      message,
+      history,
+    };
+  } catch (err) {
+    console.error('Cloud heartbeat check error:', err.message);
+  }
+}
+
 // ── Check functions ───────────────────────────────────────────────────────────
 
 async function checkPing(device) {
@@ -278,6 +322,8 @@ function startMonitoring() {
   const equipment = loadEquipment();
   equipment.forEach(scheduleDevice);
   console.log(`Monitoring ${equipment.length} device(s)`);
+  checkCloudHeartbeat();
+  setInterval(checkCloudHeartbeat, 5 * 60 * 1000);
 }
 
 function rescheduleAll() {
@@ -351,6 +397,17 @@ app.delete('/api/equipment/:id', async (req, res) => {
 app.get('/api/status', (req, res) => {
   const equipment = loadEquipment();
   const result = equipment.map(e => ({ ...e, ...getStatus(e.id) }));
+  // Append virtual cloud dashboard heartbeat device
+  if (statusMap[CLOUD_HB_ID]) {
+    result.push({
+      id: CLOUD_HB_ID,
+      name: 'Cloud Dashboard',
+      type: 'cloud',
+      host: 'GitHub Pages',
+      enabled: true,
+      ...statusMap[CLOUD_HB_ID],
+    });
+  }
   res.json(result);
 });
 
