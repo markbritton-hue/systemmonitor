@@ -201,7 +201,7 @@ async function sendNtfy(deviceId, newStatus) {
 // ── Cloud heartbeat check ─────────────────────────────────────────────────────
 
 const CLOUD_HB_ID = 'cloud-dashboard';
-const CLOUD_HB_MAX_MS = 60 * 60 * 1000; // 1 hour
+const CLOUD_HB_MAX_MS = 2 * 60 * 1000; // 2 minutes
 
 async function checkCloudHeartbeat() {
   const settings = loadSettings();
@@ -323,7 +323,7 @@ function startMonitoring() {
   equipment.forEach(scheduleDevice);
   console.log(`Monitoring ${equipment.length} device(s)`);
   checkCloudHeartbeat();
-  setInterval(checkCloudHeartbeat, 5 * 60 * 1000);
+  setInterval(checkCloudHeartbeat, 20 * 1000);
 }
 
 function rescheduleAll() {
