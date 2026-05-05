@@ -15,20 +15,27 @@ const SERVICE_ACCOUNT_FILE = path.join(__dirname, 'serviceAccountKey.json');
 // ── Firebase Admin ────────────────────────────────────────────────────────────
 let db = null;
 try {
+  const admin = require('firebase-admin');
   if (fs.existsSync(SERVICE_ACCOUNT_FILE)) {
-    const admin = require('firebase-admin');
+    // Key file present — use it directly
     const serviceAccount = require(SERVICE_ACCOUNT_FILE);
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       projectId: 'systemmonitor-66641',
     });
-    db = admin.firestore();
-    console.log('Firebase connected — syncing to Firestore');
+    console.log('Firebase connected via service account key');
   } else {
-    console.log('No serviceAccountKey.json found — running without Firebase sync');
+    // Fall back to Application Default Credentials (gcloud auth application-default login)
+    admin.initializeApp({
+      credential: admin.credential.applicationDefault(),
+      projectId: 'systemmonitor-66641',
+    });
+    console.log('Firebase connected via Application Default Credentials');
   }
+  db = admin.firestore();
 } catch (err) {
   console.error('Firebase init failed:', err.message);
+  console.error('Run: gcloud auth application-default login');
 }
 
 async function syncToFirestore(deviceId) {
