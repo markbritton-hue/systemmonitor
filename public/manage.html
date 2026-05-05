@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System Monitor — Manage</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="index.html">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+    </svg>
+    System Monitor
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Dashboard</a>
+    <a class="nav-link active" href="manage.html">Manage</a>
+    <a class="nav-link" href="settings.html">Settings</a>
+  </div>
+</nav>
+
+<div class="page">
+
+  <!-- Equipment Table -->
+  <div class="page-header">
+    <div>
+      <div class="page-title">Equipment</div>
+      <div class="page-subtitle" id="device-count">Loading…</div>
+    </div>
+    <button class="btn btn-primary" onclick="openModal()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Device
+    </button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Host / URL</th>
+          <th>Interval</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="device-tbody">
+        <tr><td colspan="6" style="text-align:center;padding:32px;color:#64748b;">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add / Edit Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Add Device</div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="m-id" />
+
+      <div class="form-group">
+        <label class="form-label">Device Name *</label>
+        <input class="form-input" id="m-name" placeholder="e.g. Main Router" />
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Check Type</label>
+          <select class="form-select" id="m-type" onchange="onTypeChange()">
+            <option value="ping">ICMP Ping</option>
+            <option value="http">HTTP/HTTPS</option>
+            <option value="service">Service / API</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Interval (seconds)</label>
+          <input class="form-input" id="m-interval" type="number" min="10" placeholder="60" />
+        </div>
+      </div>
+
+      <div class="form-group" id="host-group">
+        <label class="form-label" id="host-label">Host / IP Address *</label>
+        <input class="form-input" id="m-host" placeholder="192.168.1.1" />
+      </div>
+
+      <div class="form-group" id="url-group" style="display:none;">
+        <label class="form-label">URL *</label>
+        <input class="form-input" id="m-url" placeholder="https://example.com/health" />
+      </div>
+
+      <div class="form-group" id="content-group" style="display:none;">
+        <label class="form-label">Expected Response Content</label>
+        <input class="form-input" id="m-content" placeholder='e.g. "status":"ok"' />
+        <span class="form-hint">Response body must contain this string to be considered UP</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Notify After Offline For <span style="color:#64748b;font-weight:400;">(minutes — 0 = immediately)</span></label>
+        <input class="form-input" id="m-notify-after" type="number" min="0" placeholder="0" style="max-width:120px;" />
+        <span class="form-hint">Hold off sending an alert until the device has been offline for this many minutes. Set to 0 to notify as soon as it goes down.</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">ntfy Topic Override <span style="color:#64748b;font-weight:400;">(optional — uses global if blank)</span></label>
+        <input class="form-input" id="m-topic" placeholder="device-specific-topic" />
+      </div>
+
+      <div class="toggle-row">
+        <span class="toggle-label">Enabled</span>
+        <label class="toggle">
+          <input type="checkbox" id="m-enabled" checked />
+          <div class="toggle-slider"></div>
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveDevice()">Save Device</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal-overlay" id="confirm-overlay">
+  <div class="modal" style="max-width:360px;">
+    <div class="modal-header">
+      <div class="modal-title">Delete Device</div>
+      <button class="modal-close" onclick="closeConfirm()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="color:#94a3b8;font-size:0.875rem;">Are you sure you want to delete <strong id="confirm-name" style="color:#e2e8f0;"></strong>? This cannot be undone.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
+      <button class="btn btn-danger" id="confirm-delete-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+let devices = [];
+let statusData = {};
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function statusBadge(status) {
+  const sc = status === 'up' ? 'up' : status === 'down' ? 'down' : 'unknown';
+  const label = status === 'up' ? 'Online' : status === 'down' ? 'Offline' : 'Unknown';
+  const dotColor = { up: '#22c55e', down: '#dc2626', unknown: '#fbbf24' }[sc];
+  return `<div class="td-status">
+    <div class="status-dot ${sc}"></div>
+    <span style="font-size:0.8rem;color:${dotColor};font-weight:600;">${label}</span>
+  </div>`;
+}
+
+function typeBadge(type) {
+  const map = { ping: ['PING','badge-ping'], http: ['HTTP','badge-http'], service: ['API','badge-service'] };
+  const [label, cls] = map[type] || ['?','badge-ping'];
+  return `<span class="type-badge ${cls}">${label}</span>`;
+}
+
+async function loadPage() {
+  await loadDevices();
+}
+
+async function loadDevices() {
+  const [eqRes, stRes] = await Promise.all([
+    fetch('/api/equipment'),
+    fetch('/api/status'),
+  ]);
+  devices = await eqRes.json();
+  const statArr = await stRes.json();
+  statusData = {};
+  statArr.forEach(d => { statusData[d.id] = d; });
+  renderTable();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('device-tbody');
+  document.getElementById('device-count').textContent = `${devices.length} device${devices.length !== 1 ? 's' : ''} configured`;
+
+  if (!devices.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:#64748b;">No devices yet. Click <strong style="color:#e2e8f0;">Add Device</strong> to get started.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = devices.map(d => {
+    const st = statusData[d.id] || {};
+    const host = d.type === 'ping' ? d.host : d.url;
+    return `<tr class="${d.enabled ? '' : 'disabled-row'}" id="row-${d.id}">
+      <td><strong>${escHtml(d.name)}</strong>${d.enabled ? '' : ' <span style="font-size:0.68rem;color:#64748b;">(disabled)</span>'}</td>
+      <td>${typeBadge(d.type)}</td>
+      <td style="color:#94a3b8;font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(host)}</td>
+      <td style="color:#94a3b8;">${d.intervalSeconds}s${d.notifyAfterMinutes ? ` <span style="font-size:0.68rem;color:#64748b;">/ alert >${d.notifyAfterMinutes}m</span>` : ''}</td>
+      <td>${statusBadge(st.status || 'unknown')}</td>
+      <td>
+        <div class="td-actions">
+          <button class="btn btn-ghost btn-sm" onclick="checkNow('${d.id}', this)">Test</button>
+          <button class="btn btn-secondary btn-sm" onclick="editDevice('${d.id}')">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmDelete('${d.id}', '${escHtml(d.name)}')">Delete</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function onTypeChange() {
+  const type = document.getElementById('m-type').value;
+  const isPing = type === 'ping';
+  document.getElementById('host-group').style.display = isPing ? '' : 'none';
+  document.getElementById('url-group').style.display = isPing ? 'none' : '';
+  document.getElementById('content-group').style.display = type === 'service' ? '' : 'none';
+}
+
+function openModal(device = null) {
+  document.getElementById('modal-title').textContent = device ? 'Edit Device' : 'Add Device';
+  document.getElementById('m-id').value = device ? device.id : '';
+  document.getElementById('m-name').value = device ? device.name : '';
+  document.getElementById('m-type').value = device ? device.type : 'ping';
+  document.getElementById('m-host').value = device ? device.host : '';
+  document.getElementById('m-url').value = device ? device.url : '';
+  document.getElementById('m-content').value = device ? device.expectedContent : '';
+  document.getElementById('m-interval').value = device ? device.intervalSeconds : '';
+  document.getElementById('m-notify-after').value = device ? (device.notifyAfterMinutes || 0) : 0;
+  document.getElementById('m-topic').value = device ? device.ntfyTopic : '';
+  document.getElementById('m-enabled').checked = device ? device.enabled : true;
+  onTypeChange();
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('m-name').focus();
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+function editDevice(id) {
+  const d = devices.find(e => e.id === id);
+  if (d) openModal(d);
+}
+
+async function saveDevice() {
+  const id = document.getElementById('m-id').value;
+  const type = document.getElementById('m-type').value;
+  const name = document.getElementById('m-name').value.trim();
+  if (!name) { toast('Device name is required', 'error'); return; }
+
+  const body = {
+    name,
+    type,
+    host: document.getElementById('m-host').value.trim(),
+    url: document.getElementById('m-url').value.trim(),
+    expectedContent: document.getElementById('m-content').value.trim(),
+    intervalSeconds: Number(document.getElementById('m-interval').value) || 60,
+    notifyAfterMinutes: Number(document.getElementById('m-notify-after').value) || 0,
+    ntfyTopic: document.getElementById('m-topic').value.trim(),
+    enabled: document.getElementById('m-enabled').checked,
+  };
+
+  const url = id ? `/api/equipment/${id}` : '/api/equipment';
+  const method = id ? 'PUT' : 'POST';
+  const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (res.ok) {
+    closeModal();
+    toast(id ? 'Device updated' : 'Device added', 'success');
+    await loadDevices();
+  } else {
+    toast('Save failed', 'error');
+  }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+let deleteTargetId = null;
+
+function confirmDelete(id, name) {
+  deleteTargetId = id;
+  document.getElementById('confirm-name').textContent = name;
+  document.getElementById('confirm-overlay').classList.add('open');
+  document.getElementById('confirm-delete-btn').onclick = async () => {
+    const res = await fetch(`/api/equipment/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      closeConfirm();
+      toast('Device deleted', 'info');
+      await loadDevices();
+    } else {
+      toast('Delete failed', 'error');
+    }
+  };
+}
+
+function closeConfirm() {
+  document.getElementById('confirm-overlay').classList.remove('open');
+}
+
+// ── Test / Check Now ──────────────────────────────────────────────────────────
+async function checkNow(id, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div>';
+  try {
+    const res = await fetch(`/api/check/${id}`, { method: 'POST' });
+    const data = await res.json();
+    btn.innerHTML = 'Test';
+    btn.disabled = false;
+    statusData[id] = data;
+    renderTable();
+    const label = data.status === 'up' ? 'Online' : data.status === 'down' ? 'Offline' : 'Unknown';
+    toast(`${label} — ${data.message || ''}`, data.status === 'up' ? 'success' : 'error');
+  } catch {
+    btn.innerHTML = 'Test';
+    btn.disabled = false;
+    toast('Check failed', 'error');
+  }
+}
+
+// Close modals on overlay click
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+document.getElementById('confirm-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeConfirm();
+});
+
+loadPage();
+</script>
+</body>
+</html>

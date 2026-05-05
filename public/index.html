@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System Monitor — Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="index.html">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+    </svg>
+    System Monitor
+  </a>
+  <div class="nav-links">
+    <a class="nav-link active" href="index.html">Dashboard</a>
+    <a class="nav-link" href="manage.html">Manage</a>
+    <a class="nav-link" href="settings.html">Settings</a>
+  </div>
+  <div class="nav-right">
+    <span id="refresh-indicator" style="font-size:0.72rem;color:#64748b;"></span>
+    <button class="btn btn-ghost btn-sm" id="refresh-btn" onclick="loadStatus()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+      Refresh
+    </button>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Dashboard</div>
+      <div class="page-subtitle" id="last-updated">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar">
+    <div class="stat-chip">
+      <span class="stat-chip-label">Total Devices</span>
+      <span class="stat-chip-value" id="stat-total">—</span>
+    </div>
+    <div class="stat-chip up">
+      <span class="stat-chip-label">Online</span>
+      <span class="stat-chip-value" id="stat-up">—</span>
+    </div>
+    <div class="stat-chip down">
+      <span class="stat-chip-label">Offline</span>
+      <span class="stat-chip-value" id="stat-down">—</span>
+    </div>
+    <div class="stat-chip">
+      <span class="stat-chip-label">Unknown</span>
+      <span class="stat-chip-value" id="stat-unknown">—</span>
+    </div>
+  </div>
+
+  <!-- Device Grid -->
+  <div class="device-grid" id="device-grid">
+    <div class="empty-state">
+      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+      <p>Loading devices…</p>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+let prevStatus = {};
+
+function typeBadge(type) {
+  const map = { ping: ['PING','badge-ping'], http: ['HTTP','badge-http'], service: ['API','badge-service'] };
+  const [label, cls] = map[type] || ['?','badge-ping'];
+  return `<span class="type-badge ${cls}">${label}</span>`;
+}
+
+function statusClass(s) { return s === 'up' ? 'up' : s === 'down' ? 'down' : 'unknown'; }
+
+function sparkline(history) {
+  if (!history || !history.length) return '<div class="sparkline"></div>';
+  return '<div class="sparkline">' +
+    history.map(ok => `<div class="spark-dot ${ok ? 'ok' : 'err'}"></div>`).join('') +
+    '</div>';
+}
+
+function formatMs(ms) {
+  if (ms == null) return '—';
+  return ms < 1000 ? ms + 'ms' : (ms/1000).toFixed(1) + 's';
+}
+
+function timeAgo(iso) {
+  if (!iso) return 'never';
+  const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (diff < 5)  return 'just now';
+  if (diff < 60) return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  return Math.floor(diff/3600) + 'h ago';
+}
+
+function renderCard(d) {
+  const sc = statusClass(d.status);
+  const host = d.type === 'ping' ? d.host : d.url;
+  return `
+  <div class="device-card status-${sc}" id="card-${d.id}">
+    <div class="device-card-header">
+      <div>
+        <div class="device-name">${escHtml(d.name)}</div>
+        <div class="device-host">${escHtml(host)}</div>
+      </div>
+      ${typeBadge(d.type)}
+    </div>
+    <div class="device-card-body">
+      <div class="status-row">
+        <div class="status-dot ${sc}"></div>
+        <div class="status-text ${sc}">${sc === 'up' ? 'Online' : sc === 'down' ? 'Offline' : 'Unknown'}</div>
+        <div class="status-msg">${escHtml(d.message || '')}</div>
+      </div>
+      ${sc === 'down' && d.notifyAfterMinutes && !d.notifyDownSent ? `
+      <div style="font-size:0.72rem;color:#fbbf24;margin-bottom:8px;display:flex;align-items:center;gap:5px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Alert pending — offline &lt; ${d.notifyAfterMinutes}m threshold
+      </div>` : ''}
+      <div class="device-meta">
+        <div class="meta-item">Response: <strong>${formatMs(d.responseTime)}</strong></div>
+        <div class="meta-item">Checked: <strong>${timeAgo(d.lastCheck)}</strong></div>
+        ${d.notifyAfterMinutes ? `<div class="meta-item">Alert after: <strong>${d.notifyAfterMinutes}m offline</strong></div>` : ''}
+      </div>
+      ${sparkline(d.history)}
+    </div>
+    <div class="device-card-actions">
+      <button class="btn btn-ghost btn-sm" onclick="checkNow('${d.id}', this)">
+        Check Now
+      </button>
+    </div>
+  </div>`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+async function checkNow(id, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div>';
+  try {
+    const res = await fetch(`/api/check/${id}`, { method: 'POST' });
+    const data = await res.json();
+    const sc = statusClass(data.status);
+    btn.innerHTML = 'Check Now';
+    btn.disabled = false;
+    // Update card
+    loadStatus();
+    toast(`Check complete: ${sc === 'up' ? 'Online' : sc === 'down' ? 'Offline' : 'Unknown'}`, sc === 'up' ? 'success' : 'error');
+  } catch {
+    btn.innerHTML = 'Check Now';
+    btn.disabled = false;
+    toast('Check failed', 'error');
+  }
+}
+
+async function loadStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const devices = await res.json();
+
+    // Stats
+    const total = devices.length;
+    const up = devices.filter(d => d.status === 'up').length;
+    const down = devices.filter(d => d.status === 'down').length;
+    const unknown = devices.filter(d => d.status === 'unknown').length;
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-up').textContent = up;
+    document.getElementById('stat-down').textContent = down;
+    document.getElementById('stat-unknown').textContent = unknown;
+    document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+    // Detect status changes for toasts
+    devices.forEach(d => {
+      const prev = prevStatus[d.id];
+      if (prev && prev !== d.status) {
+        const label = d.status === 'up' ? 'came Online' : 'went Offline';
+        toast(`${d.name} ${label}`, d.status === 'up' ? 'success' : 'error');
+      }
+      prevStatus[d.id] = d.status;
+    });
+
+    // Render grid
+    const grid = document.getElementById('device-grid');
+    if (!devices.length) {
+      grid.innerHTML = `
+        <div class="empty-state">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          <p>No devices yet. <a href="manage.html">Add one →</a></p>
+        </div>`;
+    } else {
+      grid.innerHTML = devices.map(renderCard).join('');
+    }
+  } catch(e) {
+    document.getElementById('last-updated').textContent = 'Error loading status';
+  }
+}
+
+// Initial load + auto-refresh every 30s
+loadStatus();
+const INTERVAL = 30000;
+let countdown = INTERVAL / 1000;
+const indicator = document.getElementById('refresh-indicator');
+setInterval(loadStatus, INTERVAL);
+setInterval(() => {
+  countdown--;
+  if (countdown <= 0) countdown = INTERVAL / 1000;
+  indicator.textContent = `Auto-refresh in ${countdown}s`;
+}, 1000);
+</script>
+</body>
+</html>

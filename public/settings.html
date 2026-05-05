@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System Monitor — Settings</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="index.html">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+    </svg>
+    System Monitor
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Dashboard</a>
+    <a class="nav-link" href="manage.html">Manage</a>
+    <a class="nav-link active" href="settings.html">Settings</a>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Settings</div>
+      <div class="page-subtitle">Configure notifications and global monitoring defaults</div>
+    </div>
+  </div>
+
+  <!-- ntfy Card -->
+  <div class="settings-card" style="margin-bottom:20px;">
+    <div class="settings-card-title">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Push Notifications (ntfy)
+    </div>
+    <p style="font-size:0.8rem;color:#64748b;margin-bottom:16px;">
+      Install the <strong style="color:#94a3b8;">ntfy</strong> app on your Android device, subscribe to your topic, and receive alerts when equipment goes down or recovers.
+    </p>
+    <div class="settings-grid">
+      <div class="form-group">
+        <label class="form-label">ntfy Server URL</label>
+        <input class="form-input" id="s-server" placeholder="https://ntfy.sh" />
+        <span class="form-hint">Use https://ntfy.sh for the public server, or your self-hosted URL.</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Default Topic</label>
+        <input class="form-input" id="s-topic" placeholder="my-monitor-alerts" />
+        <span class="form-hint">Keep this unique and private. Per-device overrides available in Manage.</span>
+      </div>
+    </div>
+    <div style="margin-top:18px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save</button>
+      <button class="btn btn-ghost btn-sm" id="test-ntfy-btn" onclick="testNtfy()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Send Test Notification
+      </button>
+      <span id="ntfy-saved" style="font-size:0.75rem;color:#22c55e;display:none;">✓ Saved</span>
+      <span id="ntfy-test-result" style="font-size:0.75rem;display:none;"></span>
+    </div>
+  </div>
+
+  <!-- Monitoring Defaults Card -->
+  <div class="settings-card">
+    <div class="settings-card-title">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Monitoring Defaults
+    </div>
+    <div class="settings-grid">
+      <div class="form-group">
+        <label class="form-label">Default Check Interval (seconds)</label>
+        <input class="form-input" id="s-interval" type="number" min="10" placeholder="60" />
+        <span class="form-hint">Applied to new devices unless overridden per-device.</span>
+      </div>
+    </div>
+    <div style="margin-top:18px;display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save</button>
+      <span id="interval-saved" style="font-size:0.75rem;color:#22c55e;display:none;">✓ Saved</span>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+async function loadSettings() {
+  const res = await fetch('/api/settings');
+  const s = await res.json();
+  document.getElementById('s-server').value = s.ntfyServer || 'https://ntfy.sh';
+  document.getElementById('s-topic').value = s.ntfyTopic || '';
+  document.getElementById('s-interval').value = s.defaultInterval || 60;
+}
+
+async function saveSettings() {
+  const body = {
+    ntfyServer: document.getElementById('s-server').value.trim() || 'https://ntfy.sh',
+    ntfyTopic: document.getElementById('s-topic').value.trim(),
+    defaultInterval: Number(document.getElementById('s-interval').value) || 60,
+  };
+  const res = await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) {
+    ['ntfy-saved', 'interval-saved'].forEach(id => {
+      const el = document.getElementById(id);
+      el.style.display = 'inline';
+      setTimeout(() => { el.style.display = 'none'; }, 3000);
+    });
+    toast('Settings saved', 'success');
+  } else {
+    toast('Save failed', 'error');
+  }
+}
+
+async function testNtfy() {
+  const btn = document.getElementById('test-ntfy-btn');
+  const result = document.getElementById('ntfy-test-result');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Sending…';
+  result.style.display = 'none';
+  try {
+    const res = await fetch('/api/ntfy-test', { method: 'POST' });
+    const data = await res.json();
+    btn.disabled = false;
+    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Send Test Notification`;
+    result.style.display = 'inline';
+    if (res.ok) {
+      result.style.color = '#22c55e';
+      result.textContent = '✓ Notification sent — check your phone';
+      toast('Test notification sent!', 'success');
+    } else {
+      result.style.color = '#f87171';
+      result.textContent = '✗ ' + (data.error || 'Failed');
+      toast('ntfy test failed: ' + (data.error || 'unknown error'), 'error');
+    }
+    setTimeout(() => { result.style.display = 'none'; }, 6000);
+  } catch {
+    btn.disabled = false;
+    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Send Test Notification`;
+    toast('Request failed', 'error');
+  }
+}
+
+loadSettings();
+</script>
+</body>
+</html>
