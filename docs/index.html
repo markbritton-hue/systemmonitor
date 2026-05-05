@@ -6,113 +6,44 @@
   <title>System Monitor — Cloud Dashboard</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #13151a;
-      color: #e2e8f0;
-      min-height: 100vh;
-      font-size: 0.9rem;
-      line-height: 1.5;
-    }
-
-    /* Nav */
-    .nav {
-      position: sticky; top: 0; z-index: 100;
-      height: 56px; background: #0d0f14;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-      display: flex; align-items: center; padding: 0 24px; gap: 12px;
-    }
-    .nav-logo {
-      display: flex; align-items: center; gap: 10px;
-      font-size: 1rem; font-weight: 700; color: #e2e8f0;
-      text-decoration: none;
-    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #13151a; color: #e2e8f0; min-height: 100vh; font-size: 0.9rem; line-height: 1.5; }
+    .nav { position: sticky; top: 0; z-index: 100; height: 56px; background: #0d0f14; box-shadow: 0 2px 8px rgba(0,0,0,0.5); display: flex; align-items: center; padding: 0 24px; gap: 12px; }
+    .nav-logo { display: flex; align-items: center; gap: 10px; font-size: 1rem; font-weight: 700; color: #e2e8f0; text-decoration: none; }
     .nav-logo svg { color: #0078d4; }
     .nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-    .agent-badge {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 0.72rem; padding: 4px 10px;
-      border-radius: 20px; border: 1px solid;
-    }
-    .agent-badge.ok     { color: #22c55e; border-color: rgba(34,197,94,0.3); background: rgba(5,46,22,0.4); }
-    .agent-badge.warn   { color: #fbbf24; border-color: rgba(251,191,36,0.3); background: rgba(120,83,0,0.3); }
-    .agent-badge.dead   { color: #f87171; border-color: rgba(220,38,38,0.3); background: rgba(127,29,29,0.3); }
+    .agent-badge { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; padding: 4px 10px; border-radius: 20px; border: 1px solid; }
+    .agent-badge.ok   { color: #22c55e; border-color: rgba(34,197,94,0.3);  background: rgba(5,46,22,0.4); }
+    .agent-badge.warn { color: #fbbf24; border-color: rgba(251,191,36,0.3); background: rgba(120,83,0,0.3); }
+    .agent-badge.dead { color: #f87171; border-color: rgba(220,38,38,0.3);  background: rgba(127,29,29,0.3); }
     .agent-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-
-    /* Page */
     .page { max-width: 1300px; margin: 0 auto; padding: 24px 20px 48px; }
     .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
     .page-title { font-size: 1.3rem; font-weight: 700; }
     .page-subtitle { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
-
-    /* Agent warning banner */
-    .agent-banner {
-      display: none;
-      align-items: center; gap: 10px;
-      background: rgba(120,53,15,0.35);
-      border: 1px solid rgba(251,191,36,0.3);
-      border-radius: 10px;
-      padding: 12px 16px;
-      margin-bottom: 20px;
-      font-size: 0.82rem; color: #fbbf24;
-    }
+    .agent-banner { display: none; align-items: center; gap: 10px; background: rgba(120,53,15,0.35); border: 1px solid rgba(251,191,36,0.3); border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 0.82rem; color: #fbbf24; }
     .agent-banner.visible { display: flex; }
-
-    /* Stats bar */
     .stats-bar { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
-    .stat-chip {
-      background: rgba(28,31,38,0.82);
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 12px; padding: 10px 18px;
-      display: flex; flex-direction: column; gap: 2px; min-width: 110px;
-      backdrop-filter: blur(12px);
-    }
+    .stat-chip { background: rgba(28,31,38,0.82); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 10px 18px; display: flex; flex-direction: column; gap: 2px; min-width: 110px; backdrop-filter: blur(12px); }
     .stat-chip-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; }
     .stat-chip-value { font-size: 1.4rem; font-weight: 700; color: #e2e8f0; }
     .stat-chip.up   { border-color: rgba(22,183,75,0.4);  background: rgba(5,46,22,0.3); }
     .stat-chip.down { border-color: rgba(220,38,38,0.45); background: rgba(127,29,29,0.25); }
-    .stat-chip.up .stat-chip-value   { color: #22c55e; }
+    .stat-chip.up   .stat-chip-value { color: #22c55e; }
     .stat-chip.down .stat-chip-value { color: #f87171; }
-
-    /* Device grid */
     .device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-
-    .device-card {
-      position: relative;
-      background: linear-gradient(135deg, rgba(0,120,212,0.08) 0%, transparent 70%), rgba(22,25,34,0.82);
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 14px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
-      backdrop-filter: blur(12px);
-      overflow: hidden;
-    }
-    .device-card::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-      background: linear-gradient(90deg, #0078d4, #38bdf8);
-    }
+    .device-card { position: relative; background: linear-gradient(135deg, rgba(0,120,212,0.08) 0%, transparent 70%), rgba(22,25,34,0.82); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04); backdrop-filter: blur(12px); overflow: hidden; }
+    .device-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #0078d4, #38bdf8); }
     .device-card.status-up::before      { background: linear-gradient(90deg, #16a34a, #22c55e); }
     .device-card.status-down::before    { background: linear-gradient(90deg, #dc2626, #f87171); }
     .device-card.status-unknown::before { background: linear-gradient(90deg, #78350f, #fbbf24); }
-
-    .device-card-header {
-      display: flex; align-items: flex-start; justify-content: space-between;
-      padding: 16px 16px 10px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-    }
-    .device-name  { font-size: 0.95rem; font-weight: 700; color: #e2e8f0; }
-    .device-host  { font-size: 0.75rem; color: #64748b; margin-top: 2px; word-break: break-all; }
-
-    .type-badge {
-      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em;
-      text-transform: uppercase; padding: 3px 7px; border-radius: 5px; flex-shrink: 0; margin-top: 2px;
-    }
+    .device-card-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 16px 16px 10px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .device-name { font-size: 0.95rem; font-weight: 700; color: #e2e8f0; }
+    .device-host { font-size: 0.75rem; color: #64748b; margin-top: 2px; word-break: break-all; }
+    .type-badge { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 7px; border-radius: 5px; flex-shrink: 0; margin-top: 2px; }
     .badge-ping    { background: rgba(30,58,95,0.8);  color: #93c5fd; border: 1px solid rgba(59,130,246,0.25); }
     .badge-http    { background: rgba(46,16,101,0.8); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.25); }
     .badge-service { background: rgba(69,26,3,0.8);  color: #fcd34d; border: 1px solid rgba(245,158,11,0.25); }
-
     .device-card-body { padding: 14px 16px; }
-
     .status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
     .status-dot { width: 12px; height: 12px; border-radius: 50%; background: #64748b; flex-shrink: 0; }
     .status-dot.up      { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.5); }
@@ -123,37 +54,19 @@
     .status-text.down    { color: #f87171; }
     .status-text.unknown { color: #fbbf24; }
     .status-msg { font-size: 0.72rem; color: #64748b; margin-left: auto; text-align: right; }
-
     .device-meta { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
     .meta-item { font-size: 0.75rem; color: #94a3b8; }
     .meta-item strong { color: #e2e8f0; }
-
     .sparkline { display: flex; gap: 3px; align-items: center; margin-bottom: 4px; }
     .spark-dot { width: 7px; height: 7px; border-radius: 50%; background: #2e3440; }
     .spark-dot.ok  { background: #22c55e; }
     .spark-dot.err { background: #dc2626; }
-
-    .pending-alert {
-      font-size: 0.72rem; color: #fbbf24; margin-bottom: 8px;
-      display: flex; align-items: center; gap: 5px;
-    }
-
-    /* Empty state */
-    .empty-state {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 12px; padding: 60px 20px; color: #64748b; text-align: center; grid-column: 1/-1;
-    }
+    .pending-alert { font-size: 0.72rem; color: #fbbf24; margin-bottom: 8px; display: flex; align-items: center; gap: 5px; }
+    .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 60px 20px; color: #64748b; text-align: center; grid-column: 1/-1; }
     .empty-state svg { opacity: 0.3; }
-
-    /* Loading pulse */
-    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
     .loading { animation: pulse 1.5s ease infinite; }
-
-    @media (max-width: 600px) {
-      .page { padding: 16px 12px 48px; }
-      .device-grid { grid-template-columns: 1fr; }
-      .nav { padding: 0 12px; }
-    }
+    @media (max-width:600px) { .page{padding:16px 12px 48px} .device-grid{grid-template-columns:1fr} .nav{padding:0 12px} }
   </style>
 </head>
 <body>
@@ -178,17 +91,15 @@
   <div class="page-header">
     <div>
       <div class="page-title">Dashboard</div>
-      <div class="page-subtitle">Live view — updates in real time from Firestore</div>
+      <div class="page-subtitle">Live view — updates every 15 seconds</div>
     </div>
   </div>
 
-  <!-- Agent stale warning -->
   <div class="agent-banner" id="agent-banner">
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     <span id="agent-banner-text">Local agent has not reported in — data may be stale.</span>
   </div>
 
-  <!-- Stats bar -->
   <div class="stats-bar">
     <div class="stat-chip"><span class="stat-chip-label">Total</span><span class="stat-chip-value loading" id="stat-total">—</span></div>
     <div class="stat-chip up"><span class="stat-chip-label">Online</span><span class="stat-chip-value loading" id="stat-up">—</span></div>
@@ -199,34 +110,21 @@
   <div class="device-grid" id="device-grid">
     <div class="empty-state loading">
       <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-      <p>Connecting to Firestore…</p>
+      <p>Connecting to Supabase…</p>
     </div>
   </div>
 </div>
 
-<!-- Firebase JS SDK v9 (modular, CDN) -->
-<script type="module">
-import { initializeApp }                          from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getFirestore, collection, onSnapshot }  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+<script>
+const SUPABASE_URL      = 'https://cdahcsbixbeicbkedvrf.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkYWhjc2JpeGJlaWNia2VkdnJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMDYxMTIsImV4cCI6MjA5MzU4MjExMn0.XyUuvPFFZsxBPUz3NvpOSZ-sxdpSzv39nypwwrHiFeo';
 
-const firebaseConfig = {
-  apiKey:            "AIzaSyAjWR9BcNwgo077IpR8fVYLZLXbMU_RPpw",
-  authDomain:        "systemmonitor-66641.firebaseapp.com",
-  projectId:         "systemmonitor-66641",
-  storageBucket:     "systemmonitor-66641.firebasestorage.app",
-  messagingSenderId: "411310419466",
-  appId:             "1:411310419466:web:63c33c6611d2b2b8d2f9f3"
-};
-
-const fbApp = initializeApp(firebaseConfig);
-const db    = getFirestore(fbApp);
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const AGENT_WARN_MS = 3  * 60 * 1000;
+const AGENT_DEAD_MS = 10 * 60 * 1000;
 
 function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-
 function timeAgo(iso) {
   if (!iso) return 'never';
   const diff = Math.floor((Date.now() - new Date(iso)) / 1000);
@@ -235,163 +133,115 @@ function timeAgo(iso) {
   if (diff < 3600) return Math.floor(diff/60) + 'm ago';
   return Math.floor(diff/3600) + 'h ago';
 }
-
 function formatMs(ms) {
   if (ms == null) return '—';
   return ms < 1000 ? ms + 'ms' : (ms/1000).toFixed(1) + 's';
 }
-
 function typeBadge(type) {
-  const map = { ping: ['PING','badge-ping'], http: ['HTTP','badge-http'], service: ['API','badge-service'] };
-  const [label, cls] = map[type] || ['?','badge-ping'];
+  const map = { ping:['PING','badge-ping'], http:['HTTP','badge-http'], service:['API','badge-service'] };
+  const [label,cls] = map[type] || ['?','badge-ping'];
   return `<span class="type-badge ${cls}">${label}</span>`;
 }
-
 function sparkline(history) {
-  if (!history || !history.length) return '<div class="sparkline"></div>';
-  return '<div class="sparkline">' +
-    history.map(ok => `<div class="spark-dot ${ok ? 'ok' : 'err'}"></div>`).join('') +
-    '</div>';
+  if (!history||!history.length) return '<div class="sparkline"></div>';
+  return '<div class="sparkline">'+history.map(ok=>`<div class="spark-dot ${ok?'ok':'err'}"></div>`).join('')+'</div>';
 }
-
-function statusClass(s) { return s === 'up' ? 'up' : s === 'down' ? 'down' : 'unknown'; }
+function statusClass(s) { return s==='up'?'up':s==='down'?'down':'unknown'; }
 
 function renderCard(d) {
-  const sc   = statusClass(d.status);
-  const host = escHtml(d.host || '');
-  const pendingAlert = sc === 'down' && d.notifyAfterMinutes && !d.notifyDownSent;
+  const sc = statusClass(d.status);
+  const pendingAlert = sc==='down' && d.notify_after_minutes && !d.notify_down_sent;
   return `
   <div class="device-card status-${sc}">
     <div class="device-card-header">
       <div>
         <div class="device-name">${escHtml(d.name)}</div>
-        <div class="device-host">${host}</div>
+        <div class="device-host">${escHtml(d.host||'')}</div>
       </div>
       ${typeBadge(d.type)}
     </div>
     <div class="device-card-body">
       <div class="status-row">
         <div class="status-dot ${sc}"></div>
-        <div class="status-text ${sc}">${sc === 'up' ? 'Online' : sc === 'down' ? 'Offline' : 'Unknown'}</div>
-        <div class="status-msg">${escHtml(d.message || '')}</div>
+        <div class="status-text ${sc}">${sc==='up'?'Online':sc==='down'?'Offline':'Unknown'}</div>
+        <div class="status-msg">${escHtml(d.message||'')}</div>
       </div>
-      ${pendingAlert ? `
-      <div class="pending-alert">
+      ${pendingAlert?`<div class="pending-alert">
         <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        Alert pending — offline &lt; ${d.notifyAfterMinutes}m threshold
-      </div>` : ''}
+        Alert pending — offline &lt; ${d.notify_after_minutes}m threshold</div>`:''}
       <div class="device-meta">
-        <div class="meta-item">Response: <strong>${formatMs(d.responseTime)}</strong></div>
-        <div class="meta-item">Checked: <strong>${timeAgo(d.lastCheck)}</strong></div>
-        ${d.notifyAfterMinutes ? `<div class="meta-item">Alert after: <strong>${d.notifyAfterMinutes}m offline</strong></div>` : ''}
+        <div class="meta-item">Response: <strong>${formatMs(d.response_time)}</strong></div>
+        <div class="meta-item">Checked: <strong>${timeAgo(d.last_check)}</strong></div>
+        ${d.notify_after_minutes?`<div class="meta-item">Alert after: <strong>${d.notify_after_minutes}m offline</strong></div>`:''}
       </div>
       ${sparkline(d.history)}
     </div>
   </div>`;
 }
 
-// ── Agent heartbeat check ─────────────────────────────────────────────────────
-
-const AGENT_WARN_MS  = 3 * 60 * 1000;   // yellow at 3 min
-const AGENT_DEAD_MS  = 10 * 60 * 1000;  // red at 10 min
-
 function updateAgentBadge(devices) {
   if (!devices.length) return;
-  // Use the most recent agentHeartbeat across all devices
-  const latest = devices
-    .map(d => d.agentHeartbeat ? new Date(d.agentHeartbeat).getTime() : 0)
-    .reduce((a, b) => Math.max(a, b), 0);
+  const latest = devices.map(d=>d.agent_heartbeat?new Date(d.agent_heartbeat).getTime():0).reduce((a,b)=>Math.max(a,b),0);
   if (!latest) return;
-
-  const age    = Date.now() - latest;
-  const badge  = document.getElementById('agent-badge');
-  const label  = document.getElementById('agent-label');
+  const age = Date.now() - latest;
+  const badge = document.getElementById('agent-badge');
+  const label = document.getElementById('agent-label');
   const banner = document.getElementById('agent-banner');
   const bannerText = document.getElementById('agent-banner-text');
-
   badge.className = 'agent-badge';
   banner.classList.remove('visible');
-
   if (age < AGENT_WARN_MS) {
-    badge.classList.add('ok');
-    label.textContent = 'Agent online';
+    badge.classList.add('ok'); label.textContent = 'Agent online';
   } else if (age < AGENT_DEAD_MS) {
-    badge.classList.add('warn');
-    label.textContent = `Agent late (${Math.floor(age/60000)}m)`;
-    banner.classList.add('visible');
-    bannerText.textContent = `Local agent last reported ${Math.floor(age/60000)} minute(s) ago — data may be stale.`;
+    badge.classList.add('warn'); label.textContent = `Agent late (${Math.floor(age/60000)}m)`;
+    banner.classList.add('visible'); bannerText.textContent = `Local agent last reported ${Math.floor(age/60000)} minute(s) ago — data may be stale.`;
   } else {
-    badge.classList.add('dead');
-    label.textContent = 'Agent offline';
-    banner.classList.add('visible');
-    bannerText.textContent = `Local agent has not reported in ${Math.floor(age/60000)} minutes — status shown may be outdated.`;
+    badge.classList.add('dead'); label.textContent = 'Agent offline';
+    banner.classList.add('visible'); bannerText.textContent = `Local agent has not reported in ${Math.floor(age/60000)} minutes — status shown may be outdated.`;
   }
 }
 
-// ── Firestore real-time listener ──────────────────────────────────────────────
-
-const devicesCol = collection(db, 'devices');
-
-onSnapshot(devicesCol, (snapshot) => {
-  const devices = snapshot.docs.map(doc => doc.data());
-
-  // Stats
-  const up      = devices.filter(d => d.status === 'up').length;
-  const down    = devices.filter(d => d.status === 'down').length;
-  const unknown = devices.filter(d => d.status !== 'up' && d.status !== 'down').length;
-  document.getElementById('stat-total').textContent   = devices.length;
-  document.getElementById('stat-up').textContent      = up;
-  document.getElementById('stat-down').textContent    = down;
-  document.getElementById('stat-unknown').textContent = unknown;
-  document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
-
-  // Remove loading pulse
-  document.querySelectorAll('.loading').forEach(el => el.classList.remove('loading'));
-
-  // Agent heartbeat
-  updateAgentBadge(devices);
-
-  // Sort: down first, then unknown, then up — all alphabetical within group
-  devices.sort((a, b) => {
-    const order = { down: 0, unknown: 1, up: 2 };
-    const ao = order[a.status] ?? 1;
-    const bo = order[b.status] ?? 1;
-    if (ao !== bo) return ao - bo;
-    return (a.name || '').localeCompare(b.name || '');
-  });
-
-  // Render
-  const grid = document.getElementById('device-grid');
-  if (!devices.length) {
-    grid.innerHTML = `<div class="empty-state">
-      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-      <p>No devices in Firestore yet.<br>Start the local agent to begin syncing.</p>
-    </div>`;
-  } else {
-    grid.innerHTML = devices.map(renderCard).join('');
-  }
-
-  // Refresh time-ago labels every 30s without a full re-render
-  clearTimeout(window._timeRefresh);
-  window._timeRefresh = setTimeout(() => {
-    // Trigger a lightweight label refresh by re-calling with same data
-    document.querySelectorAll('.meta-item strong').forEach(el => {
-      // Already reactive via onSnapshot; just let the next snapshot do it
+async function loadDevices() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/devices?select=*`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
     });
-  }, 30000);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const devices = await res.json();
 
-}, (err) => {
-  document.getElementById('device-grid').innerHTML = `<div class="empty-state">
-    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-    <p>Firestore error: ${escHtml(err.message)}<br><small>Check your security rules.</small></p>
-  </div>`;
-  console.error('Firestore error:', err);
-});
+    const up      = devices.filter(d=>d.status==='up').length;
+    const down    = devices.filter(d=>d.status==='down').length;
+    const unknown = devices.filter(d=>d.status!=='up'&&d.status!=='down').length;
+    document.getElementById('stat-total').textContent   = devices.length;
+    document.getElementById('stat-up').textContent      = up;
+    document.getElementById('stat-down').textContent    = down;
+    document.getElementById('stat-unknown').textContent = unknown;
+    document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    document.querySelectorAll('.loading').forEach(el=>el.classList.remove('loading'));
 
-// Refresh time-ago labels every 30s
-setInterval(() => {
-  document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
-}, 30000);
+    updateAgentBadge(devices);
+
+    devices.sort((a,b)=>{ const o={down:0,unknown:1,up:2}; return (o[a.status]??1)-(o[b.status]??1); });
+
+    const grid = document.getElementById('device-grid');
+    if (!devices.length) {
+      grid.innerHTML = `<div class="empty-state">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <p>No devices yet.<br>Start the local agent to begin syncing.</p>
+      </div>`;
+    } else {
+      grid.innerHTML = devices.map(renderCard).join('');
+    }
+  } catch(err) {
+    document.getElementById('device-grid').innerHTML = `<div class="empty-state">
+      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+      <p>Error: ${escHtml(err.message)}</p>
+    </div>`;
+  }
+}
+
+loadDevices();
+setInterval(loadDevices, 15000);
 </script>
 </body>
 </html>

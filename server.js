@@ -10,59 +10,64 @@ const PORT = 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const EQUIPMENT_FILE = path.join(DATA_DIR, 'equipment.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
-const SERVICE_ACCOUNT_FILE = path.join(__dirname, 'serviceAccountKey.json');
+// ── Supabase sync ─────────────────────────────────────────────────────────────
 
-// ── Firebase Admin ────────────────────────────────────────────────────────────
-let db = null;
-try {
-  const admin = require('firebase-admin');
-  if (fs.existsSync(SERVICE_ACCOUNT_FILE)) {
-    // Key file present — use it directly
-    const serviceAccount = require(SERVICE_ACCOUNT_FILE);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      projectId: 'systemmonitor-66641',
-    });
-    console.log('Firebase connected via service account key');
-  } else {
-    // Fall back to Application Default Credentials (gcloud auth application-default login)
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
-      projectId: 'systemmonitor-66641',
-    });
-    console.log('Firebase connected via Application Default Credentials');
+async function syncToSupabase(deviceId) {
+  const settings = loadSettings();
+  const { supabaseUrl, supabaseKey } = settings;
+  if (!supabaseUrl || !supabaseKey) return;
+
+  const equipment = loadEquipment();
+  const device = equipment.find(e => e.id === deviceId);
+  const status = getStatus(deviceId);
+  if (!device) return;
+
+  const row = {
+    id: deviceId,
+    name: device.name,
+    host: device.host || device.url,
+    type: device.type,
+    enabled: device.enabled,
+    status: status.status,
+    response_time: status.responseTime,
+    last_check: status.lastCheck,
+    last_change: status.lastChange,
+    message: status.message,
+    history: status.history || [],
+    notify_after_minutes: device.notifyAfterMinutes || 0,
+    notify_down_sent: status.notifyDownSent || false,
+    agent_heartbeat: new Date().toISOString(),
+  };
+
+  try {
+    await axios.post(
+      `${supabaseUrl}/rest/v1/devices`,
+      row,
+      {
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+      }
+    );
+  } catch (err) {
+    console.error('Supabase sync error:', err.response?.data?.message || err.message);
   }
-  db = admin.firestore();
-} catch (err) {
-  console.error('Firebase init failed:', err.message);
-  console.error('Run: gcloud auth application-default login');
 }
 
-async function syncToFirestore(deviceId) {
-  if (!db) return;
+async function deleteFromSupabase(deviceId) {
+  const settings = loadSettings();
+  const { supabaseUrl, supabaseKey } = settings;
+  if (!supabaseUrl || !supabaseKey) return;
   try {
-    const equipment = loadEquipment();
-    const device = equipment.find(e => e.id === deviceId);
-    const status = getStatus(deviceId);
-    if (!device) return;
-    await db.collection('devices').doc(deviceId).set({
-      id: deviceId,
-      name: device.name,
-      host: device.host || device.url,
-      type: device.type,
-      enabled: device.enabled,
-      status: status.status,
-      responseTime: status.responseTime,
-      lastCheck: status.lastCheck,
-      lastChange: status.lastChange,
-      message: status.message,
-      history: status.history || [],
-      notifyAfterMinutes: device.notifyAfterMinutes || 0,
-      notifyDownSent: status.notifyDownSent || false,
-      agentHeartbeat: new Date().toISOString(),
-    });
+    await axios.delete(
+      `${supabaseUrl}/rest/v1/devices?id=eq.${deviceId}`,
+      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+    );
   } catch (err) {
-    console.error('Firestore sync error:', err.message);
+    console.error('Supabase delete error:', err.message);
   }
 }
 
@@ -252,7 +257,7 @@ async function checkDevice(device) {
     case 'http':    await checkHttp(device);    break;
     case 'service': await checkService(device); break;
   }
-  await syncToFirestore(device.id);
+  await syncToSupabase(device.id);
 }
 
 // ── Scheduler ─────────────────────────────────────────────────────────────────
@@ -338,10 +343,7 @@ app.delete('/api/equipment/:id', async (req, res) => {
     delete timers[req.params.id];
   }
   delete statusMap[req.params.id];
-  // Remove from Firestore
-  if (db) {
-    try { await db.collection('devices').doc(req.params.id).delete(); } catch {}
-  }
+  await deleteFromSupabase(req.params.id);
   res.json({ ok: true });
 });
 
