@@ -196,6 +196,46 @@ body {
 
 .device-card-actions { padding: 0 16px 14px; display: flex; gap: 8px; }
 
+/* ── Cloud Dashboard Card ───────────────────────────────────────────────────── */
+.cloud-card {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, rgba(6,182,212,0.1) 0%, rgba(0,120,212,0.08) 50%, transparent 100%), rgba(22,25,34,0.9);
+  border: 1px solid rgba(6,182,212,0.25);
+  border-radius: 14px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
+  backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
+  flex-wrap: wrap;
+}
+.cloud-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #0891b2, #67e8f9, #0078d4);
+}
+.cloud-card.status-down { border-color: rgba(220,38,38,0.35); }
+.cloud-card.status-down::before { background: linear-gradient(90deg, #dc2626, #f87171); }
+.cloud-card.status-unknown { border-color: rgba(251,191,36,0.25); }
+.cloud-card.status-unknown::before { background: linear-gradient(90deg, #78350f, #fbbf24); }
+
+.cloud-card-icon { color: #67e8f9; flex-shrink: 0; opacity: 0.85; }
+.cloud-card.status-down .cloud-card-icon { color: #f87171; }
+.cloud-card.status-unknown .cloud-card-icon { color: #fbbf24; }
+
+.cloud-card-main { flex: 1; min-width: 140px; }
+.cloud-card-title { font-size: 1rem; font-weight: 700; color: #e2e8f0; }
+.cloud-card-sub { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+
+.cloud-card-status { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.cloud-card-meta { display: flex; gap: 16px; flex-wrap: wrap; }
+.cloud-card-spark { display: flex; align-items: center; }
+
 /* ── Buttons ────────────────────────────────────────────────────────────────── */
 .btn {
   display: inline-flex;
