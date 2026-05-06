@@ -321,7 +321,38 @@ function scheduleDevice(device) {
   timers[device.id] = setInterval(() => checkDevice(device), (device.intervalSeconds || 60) * 1000);
 }
 
-function startMonitoring() {
+async function restoreDownSince() {
+  const settings = loadSettings();
+  const { supabaseUrl, supabaseKey } = settings;
+  if (!supabaseUrl || !supabaseKey) return;
+  try {
+    const res = await axios.get(
+      `${supabaseUrl}/rest/v1/devices?status=eq.down&select=id,last_change`,
+      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+    );
+    for (const row of res.data) {
+      if (!row.last_change) continue;
+      const downSince = new Date(row.last_change).getTime();
+      statusMap[row.id] = {
+        id: row.id,
+        status: 'down',
+        responseTime: null,
+        lastCheck: null,
+        lastChange: row.last_change,
+        message: 'Restored from last known state',
+        history: [],
+        downSince,
+        notifyDownSent: false,
+      };
+      console.log(`Restored downSince for ${row.id} from ${row.last_change}`);
+    }
+  } catch (err) {
+    console.error('Could not restore down state from Supabase:', err.message);
+  }
+}
+
+async function startMonitoring() {
+  await restoreDownSince();
   const equipment = loadEquipment();
   equipment.forEach(scheduleDevice);
   console.log(`Monitoring ${equipment.length} device(s)`);
