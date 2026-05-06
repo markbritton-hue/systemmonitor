@@ -192,9 +192,10 @@ async function sendTestNotification() {
     const res = await fetch(`${NTFY_SERVER}/${NTFY_TOPIC}`, {
       method: 'POST',
       headers: {
-        Title: '🔔 System Monitor — Cloud Test',
+        Title: 'System Monitor - Cloud Test',
         Priority: 'default',
         Tags: 'bell',
+        'Content-Type': 'text/plain',
       },
       body: `Test notification from Cloud Dashboard\nTime: ${new Date().toLocaleString()}`,
     });
