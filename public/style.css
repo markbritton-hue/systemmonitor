@@ -198,10 +198,9 @@ body {
 
 /* ── Cloud Dashboard Card ───────────────────────────────────────────────────── */
 .cloud-card {
-  grid-column: 1 / -1;
   display: flex;
-  align-items: center;
-  gap: 20px;
+  flex-direction: column;
+  gap: 12px;
   padding: 16px 24px;
   background: linear-gradient(135deg, rgba(6,182,212,0.1) 0%, rgba(0,120,212,0.08) 50%, transparent 100%), rgba(22,25,34,0.9);
   border: 1px solid rgba(6,182,212,0.25);
@@ -224,17 +223,13 @@ body {
 .cloud-card.status-unknown { border-color: rgba(251,191,36,0.25); }
 .cloud-card.status-unknown::before { background: linear-gradient(90deg, #78350f, #fbbf24); }
 
+.cloud-card-header { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 12px; }
 .cloud-card-icon { color: #67e8f9; flex-shrink: 0; opacity: 0.85; }
 .cloud-card.status-down .cloud-card-icon { color: #f87171; }
 .cloud-card.status-unknown .cloud-card-icon { color: #fbbf24; }
-
-.cloud-card-main { flex: 1; min-width: 140px; }
-.cloud-card-title { font-size: 1rem; font-weight: 700; color: #e2e8f0; }
+.cloud-card-main { flex: 1; }
+.cloud-card-title { font-size: 0.95rem; font-weight: 700; color: #e2e8f0; }
 .cloud-card-sub { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
-
-.cloud-card-status { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.cloud-card-meta { display: flex; gap: 16px; flex-wrap: wrap; }
-.cloud-card-spark { display: flex; align-items: center; }
 
 /* ── Buttons ────────────────────────────────────────────────────────────────── */
 .btn {
