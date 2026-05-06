@@ -11,15 +11,32 @@
     .nav-logo { display: flex; align-items: center; gap: 10px; font-size: 1rem; font-weight: 700; color: #e2e8f0; text-decoration: none; }
     .nav-logo svg { color: #0078d4; }
     .nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-    .agent-badge { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; padding: 4px 10px; border-radius: 20px; border: 1px solid; }
-    .agent-badge.ok     { color: #22c55e; border-color: rgba(34,197,94,0.3);  background: rgba(5,46,22,0.4); }
-    .agent-badge.warn   { color: #fbbf24; border-color: rgba(251,191,36,0.3); background: rgba(120,83,0,0.3); }
-    .agent-badge.dead   { color: #f87171; border-color: rgba(220,38,38,0.3);  background: rgba(127,29,29,0.3); }
     .nav-btn { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 600; padding: 5px 12px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #e2e8f0; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
     .nav-btn:hover { background: rgba(255,255,255,0.1); }
     .nav-btn.paused { color: #fbbf24; border-color: rgba(251,191,36,0.35); background: rgba(120,83,0,0.3); }
     .nav-btn.test-btn { color: #93c5fd; border-color: rgba(59,130,246,0.3); background: rgba(30,58,95,0.4); }
-    .agent-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .agent-card { grid-column: 1/-1; display: flex; align-items: center; gap: 20px; padding: 16px 24px; border-radius: 14px; border: 1px solid; box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04); backdrop-filter: blur(12px); position: relative; overflow: hidden; flex-wrap: wrap; }
+    .agent-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+    .agent-card.ok   { background: linear-gradient(135deg, rgba(34,197,94,0.08) 0%, transparent 70%), rgba(22,25,34,0.9); border-color: rgba(34,197,94,0.25); }
+    .agent-card.ok::before { background: linear-gradient(90deg, #16a34a, #22c55e); }
+    .agent-card.warn { background: linear-gradient(135deg, rgba(251,191,36,0.08) 0%, transparent 70%), rgba(22,25,34,0.9); border-color: rgba(251,191,36,0.25); }
+    .agent-card.warn::before { background: linear-gradient(90deg, #78350f, #fbbf24); }
+    .agent-card.dead { background: linear-gradient(135deg, rgba(220,38,38,0.08) 0%, transparent 70%), rgba(22,25,34,0.9); border-color: rgba(220,38,38,0.3); }
+    .agent-card.dead::before { background: linear-gradient(90deg, #dc2626, #f87171); }
+    .agent-card-icon.ok   { color: #22c55e; }
+    .agent-card-icon.warn { color: #fbbf24; }
+    .agent-card-icon.dead { color: #f87171; }
+    .agent-card-main { flex: 1; min-width: 140px; }
+    .agent-card-title { font-size: 1rem; font-weight: 700; color: #e2e8f0; }
+    .agent-card-sub { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+    .agent-status-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .agent-status-dot.ok   { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.5); }
+    .agent-status-dot.warn { background: #fbbf24; box-shadow: 0 0 8px rgba(251,191,36,0.4); }
+    .agent-status-dot.dead { background: #dc2626; box-shadow: 0 0 8px rgba(220,38,38,0.5); }
+    .agent-status-text { font-size: 1rem; font-weight: 700; }
+    .agent-status-text.ok   { color: #22c55e; }
+    .agent-status-text.warn { color: #fbbf24; }
+    .agent-status-text.dead { color: #f87171; }
     .page { max-width: 1300px; margin: 0 auto; padding: 24px 20px 48px; }
     .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
     .page-title { font-size: 1.3rem; font-weight: 700; }
@@ -93,10 +110,6 @@
       <svg id="pause-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
       <span id="pause-label">Pause Alerts</span>
     </button>
-    <div class="agent-badge ok" id="agent-badge">
-      <div class="agent-dot"></div>
-      <span id="agent-label">Agent online</span>
-    </div>
   </div>
 </nav>
 
@@ -108,12 +121,7 @@
     </div>
   </div>
 
-  <div class="agent-banner" id="agent-banner">
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    <span id="agent-banner-text">Local agent has not reported in — data may be stale.</span>
-  </div>
-
-  <div class="stats-bar">
+<div class="stats-bar">
     <div class="stat-chip"><span class="stat-chip-label">Total</span><span class="stat-chip-value loading" id="stat-total">—</span></div>
     <div class="stat-chip up"><span class="stat-chip-label">Online</span><span class="stat-chip-value loading" id="stat-up">—</span></div>
     <div class="stat-chip down"><span class="stat-chip-label">Offline</span><span class="stat-chip-value loading" id="stat-down">—</span></div>
@@ -283,26 +291,33 @@ function renderCard(d) {
   </div>`;
 }
 
-function updateAgentBadge(devices) {
-  if (!devices.length) return;
+function renderAgentCard(devices) {
   const latest = devices.map(d=>d.agent_heartbeat?new Date(d.agent_heartbeat).getTime():0).reduce((a,b)=>Math.max(a,b),0);
-  if (!latest) return;
+  if (!latest) return '';
   const age = Date.now() - latest;
-  const badge = document.getElementById('agent-badge');
-  const label = document.getElementById('agent-label');
-  const banner = document.getElementById('agent-banner');
-  const bannerText = document.getElementById('agent-banner-text');
-  badge.className = 'agent-badge';
-  banner.classList.remove('visible');
+  const ageMin = Math.floor(age / 60000);
+  let cls, statusText, subText;
   if (age < AGENT_WARN_MS) {
-    badge.classList.add('ok'); label.textContent = 'Agent online';
+    cls = 'ok'; statusText = 'Online'; subText = 'Last seen ' + timeAgo(new Date(latest).toISOString());
   } else if (age < AGENT_DEAD_MS) {
-    badge.classList.add('warn'); label.textContent = `Agent late (${Math.floor(age/60000)}m)`;
-    banner.classList.add('visible'); bannerText.textContent = `Local agent last reported ${Math.floor(age/60000)} minute(s) ago — data may be stale.`;
+    cls = 'warn'; statusText = 'Late'; subText = `Last seen ${ageMin}m ago — data may be stale`;
   } else {
-    badge.classList.add('dead'); label.textContent = 'Agent offline';
-    banner.classList.add('visible'); bannerText.textContent = `Local agent has not reported in ${Math.floor(age/60000)} minutes — status shown may be outdated.`;
+    cls = 'dead'; statusText = 'Offline'; subText = `No report in ${ageMin}m — internet or server may be down`;
   }
+  return `
+  <div class="agent-card ${cls}">
+    <div class="agent-card-icon ${cls}">
+      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+    </div>
+    <div class="agent-card-main">
+      <div class="agent-card-title">Local Agent</div>
+      <div class="agent-card-sub">${subText}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+      <div class="agent-status-dot ${cls}"></div>
+      <div class="agent-status-text ${cls}">${statusText}</div>
+    </div>
+  </div>`;
 }
 
 async function writeCloudHeartbeat() {
@@ -351,18 +366,17 @@ async function loadDevices() {
     document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
     document.querySelectorAll('.loading').forEach(el=>el.classList.remove('loading'));
 
-    updateAgentBadge(devices);
-
     devices.sort((a,b)=>{ const o={down:0,unknown:1,up:2}; return (o[a.status]??1)-(o[b.status]??1); });
 
     const grid = document.getElementById('device-grid');
+    const agentCard = renderAgentCard(devices);
     if (!devices.length) {
-      grid.innerHTML = `<div class="empty-state">
+      grid.innerHTML = agentCard + `<div class="empty-state">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
         <p>No devices yet.<br>Start the local agent to begin syncing.</p>
       </div>`;
     } else {
-      grid.innerHTML = devices.map(renderCard).join('');
+      grid.innerHTML = agentCard + devices.map(renderCard).join('');
     }
   } catch(err) {
     document.getElementById('device-grid').innerHTML = `<div class="empty-state">
