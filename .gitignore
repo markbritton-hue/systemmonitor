@@ -1,8 +1,5 @@
 node_modules/
 
-# Firebase service account — contains private key, never commit this
-serviceAccountKey.json
-
 # Local data files — equipment and settings are environment-specific
 data/equipment.json
 data/settings.json
