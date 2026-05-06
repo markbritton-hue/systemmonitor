@@ -138,6 +138,7 @@ const AGENT_WARN_MS = 3  * 60 * 1000;
 const AGENT_DEAD_MS = 10 * 60 * 1000;
 
 let isPaused = false;
+let lastDevices = [];
 
 async function loadPauseState() {
   try {
@@ -188,16 +189,34 @@ async function sendTestNotification() {
   const orig = btn.innerHTML;
   btn.innerHTML = '…sending';
   btn.disabled = true;
+
+  const up      = lastDevices.filter(d => d.status === 'up').length;
+  const down    = lastDevices.filter(d => d.status === 'down').length;
+  const unknown = lastDevices.filter(d => d.status !== 'up' && d.status !== 'down').length;
+
+  const downList = lastDevices
+    .filter(d => d.status === 'down')
+    .map(d => `  - ${d.name} (${d.host || d.url || ''})`)
+    .join('\n');
+
+  const body = [
+    `Status Report - ${new Date().toLocaleString()}`,
+    `Online: ${up}  Offline: ${down}  Unknown: ${unknown}`,
+    downList ? `\nOffline devices:\n${downList}` : '',
+  ].filter(Boolean).join('\n');
+
+  const hasDown = down > 0;
+
   try {
     const res = await fetch(`${NTFY_SERVER}/${NTFY_TOPIC}`, {
       method: 'POST',
       headers: {
-        Title: 'System Monitor - Cloud Test',
-        Priority: 'default',
-        Tags: 'bell',
+        Title: hasDown ? `System Monitor - ${down} Device(s) Offline` : 'System Monitor - All Systems Online',
+        Priority: hasDown ? 'high' : 'default',
+        Tags: hasDown ? 'rotating_light' : 'white_check_mark',
         'Content-Type': 'text/plain',
       },
-      body: `Test notification from Cloud Dashboard\nTime: ${new Date().toLocaleString()}`,
+      body,
     });
     btn.innerHTML = res.ok ? '✓ Sent' : '✗ Failed';
   } catch (_) {
@@ -319,6 +338,7 @@ async function loadDevices() {
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const all = await res.json();
     const devices = all.filter(d => d.id !== 'cloud-dashboard');
+    lastDevices = devices;
 
     const up      = devices.filter(d=>d.status==='up').length;
     const down    = devices.filter(d=>d.status==='down').length;
