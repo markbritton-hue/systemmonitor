@@ -71,7 +71,6 @@ body {
 .stats-bar {
   display: flex;
   gap: 12px;
-  margin-bottom: 24px;
   flex-wrap: wrap;
 }
 
