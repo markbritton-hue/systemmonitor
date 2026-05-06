@@ -327,7 +327,7 @@ async function restoreDownSince() {
   if (!supabaseUrl || !supabaseKey) return;
   try {
     const res = await axios.get(
-      `${supabaseUrl}/rest/v1/devices?status=eq.down&select=id,last_change`,
+      `${supabaseUrl}/rest/v1/devices?status=eq.down&select=id,last_change,notify_down_sent`,
       { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
     );
     for (const row of res.data) {
@@ -342,9 +342,9 @@ async function restoreDownSince() {
         message: 'Restored from last known state',
         history: [],
         downSince,
-        notifyDownSent: false,
+        notifyDownSent: row.notify_down_sent || false,
       };
-      console.log(`Restored downSince for ${row.id} from ${row.last_change}`);
+      console.log(`Restored downSince for ${row.id} from ${row.last_change} (notifyDownSent=${row.notify_down_sent})`);
     }
   } catch (err) {
     console.error('Could not restore down state from Supabase:', err.message);
