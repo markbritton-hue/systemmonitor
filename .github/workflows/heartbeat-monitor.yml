@@ -1,0 +1,125 @@
+name: Heartbeat Monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # every 5 minutes
+  workflow_dispatch:          # allow manual trigger for testing
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check agent heartbeat and notify
+        env:
+          SUPABASE_URL:  ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:  ${{ secrets.SUPABASE_KEY }}
+          NTFY_TOPIC:    ${{ secrets.NTFY_TOPIC }}
+          NTFY_SERVER:   ${{ secrets.NTFY_SERVER }}
+        run: |
+          NTFY_SERVER="${NTFY_SERVER:-https://ntfy.sh}"
+          STALE_THRESHOLD=600      # 10 minutes — agent considered offline
+          ALERT_COOLDOWN=3600      # 1 hour — minimum gap between repeat alerts
+
+          # ── Fetch latest agent heartbeat (exclude cloud-dashboard row) ──────
+          RESPONSE=$(curl -sf \
+            "$SUPABASE_URL/rest/v1/devices?id=neq.cloud-dashboard&select=agent_heartbeat&order=agent_heartbeat.desc&limit=1" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY") || { echo "Supabase fetch failed"; exit 0; }
+
+          HEARTBEAT=$(echo "$RESPONSE" | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          hb = data[0]['agent_heartbeat'] if data and data[0].get('agent_heartbeat') else ''
+          print(hb)
+          " 2>/dev/null || echo "")
+
+          if [ -z "$HEARTBEAT" ]; then
+            echo "No agent heartbeat found in Supabase — skipping"
+            exit 0
+          fi
+
+          NOW=$(date +%s)
+          HB_TS=$(python3 -c "
+          from datetime import datetime, timezone
+          import sys
+          s = '$HEARTBEAT'.replace('Z','+00:00')
+          try:
+            dt = datetime.fromisoformat(s)
+            print(int(dt.timestamp()))
+          except:
+            print(0)
+          ")
+          AGE=$((NOW - HB_TS))
+          echo "Agent heartbeat age: ${AGE}s (threshold: ${STALE_THRESHOLD}s)"
+
+          # ── Fetch last cloud alert state from meta table ───────────────────
+          META=$(curl -sf \
+            "$SUPABASE_URL/rest/v1/meta?key=eq.cloud_agent_alert&select=value,updated_at" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY") || META="[]"
+
+          LAST_ALERT=$(echo "$META" | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          print(data[0]['value'] if data else '')
+          " 2>/dev/null || echo "")
+
+          LAST_ALERT_TS=0
+          if [ -n "$LAST_ALERT" ]; then
+            LAST_ALERT_TS=$(python3 -c "
+          from datetime import datetime, timezone
+          s = '$LAST_ALERT'.replace('Z','+00:00')
+          try:
+            dt = datetime.fromisoformat(s)
+            print(int(dt.timestamp()))
+          except:
+            print(0)
+            ")
+          fi
+
+          TIME_SINCE_ALERT=$((NOW - LAST_ALERT_TS))
+
+          # ── Agent offline ──────────────────────────────────────────────────
+          if [ "$AGE" -gt "$STALE_THRESHOLD" ]; then
+            AGE_MIN=$((AGE / 60))
+            if [ "$TIME_SINCE_ALERT" -gt "$ALERT_COOLDOWN" ] || [ "$LAST_ALERT" = "recovered" ]; then
+              echo "Sending offline alert (agent ${AGE_MIN}m stale)"
+              curl -sf -X POST "$NTFY_SERVER/$NTFY_TOPIC" \
+                -H "Title: 🔴 System Monitor — Agent Offline" \
+                -H "Priority: urgent" \
+                -H "Tags: rotating_light" \
+                -d "Local monitoring agent has not reported in ${AGE_MIN} minutes. Internet or server may be down." || true
+
+              # Record alert sent
+              NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+              curl -sf -X POST "$SUPABASE_URL/rest/v1/meta" \
+                -H "apikey: $SUPABASE_KEY" \
+                -H "Authorization: Bearer $SUPABASE_KEY" \
+                -H "Content-Type: application/json" \
+                -H "Prefer: resolution=merge-duplicates" \
+                -d "{\"key\":\"cloud_agent_alert\",\"value\":\"$NOW_ISO\",\"updated_at\":\"$NOW_ISO\"}" || true
+            else
+              echo "Alert already sent $((TIME_SINCE_ALERT / 60))m ago — skipping (cooldown ${ALERT_COOLDOWN}s)"
+            fi
+
+          # ── Agent recovered ───────────────────────────────────────────────
+          else
+            if [ -n "$LAST_ALERT" ] && [ "$LAST_ALERT" != "recovered" ]; then
+              echo "Agent recovered — sending recovery notification"
+              curl -sf -X POST "$NTFY_SERVER/$NTFY_TOPIC" \
+                -H "Title: ✅ System Monitor — Agent Back Online" \
+                -H "Priority: default" \
+                -H "Tags: white_check_mark" \
+                -d "Local monitoring agent is reporting again. All checks resuming." || true
+
+              NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+              curl -sf -X POST "$SUPABASE_URL/rest/v1/meta" \
+                -H "apikey: $SUPABASE_KEY" \
+                -H "Authorization: Bearer $SUPABASE_KEY" \
+                -H "Content-Type: application/json" \
+                -H "Prefer: resolution=merge-duplicates" \
+                -d "{\"key\":\"cloud_agent_alert\",\"value\":\"recovered\",\"updated_at\":\"$NOW_ISO\"}" || true
+            else
+              echo "Agent online — no action needed"
+            fi
+          fi
