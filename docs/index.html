@@ -12,9 +12,13 @@
     .nav-logo svg { color: #0078d4; }
     .nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
     .agent-badge { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; padding: 4px 10px; border-radius: 20px; border: 1px solid; }
-    .agent-badge.ok   { color: #22c55e; border-color: rgba(34,197,94,0.3);  background: rgba(5,46,22,0.4); }
-    .agent-badge.warn { color: #fbbf24; border-color: rgba(251,191,36,0.3); background: rgba(120,83,0,0.3); }
-    .agent-badge.dead { color: #f87171; border-color: rgba(220,38,38,0.3);  background: rgba(127,29,29,0.3); }
+    .agent-badge.ok     { color: #22c55e; border-color: rgba(34,197,94,0.3);  background: rgba(5,46,22,0.4); }
+    .agent-badge.warn   { color: #fbbf24; border-color: rgba(251,191,36,0.3); background: rgba(120,83,0,0.3); }
+    .agent-badge.dead   { color: #f87171; border-color: rgba(220,38,38,0.3);  background: rgba(127,29,29,0.3); }
+    .nav-btn { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 600; padding: 5px 12px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #e2e8f0; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+    .nav-btn:hover { background: rgba(255,255,255,0.1); }
+    .nav-btn.paused { color: #fbbf24; border-color: rgba(251,191,36,0.35); background: rgba(120,83,0,0.3); }
+    .nav-btn.test-btn { color: #93c5fd; border-color: rgba(59,130,246,0.3); background: rgba(30,58,95,0.4); }
     .agent-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
     .page { max-width: 1300px; margin: 0 auto; padding: 24px 20px 48px; }
     .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
@@ -81,6 +85,14 @@
   </a>
   <div class="nav-right">
     <span style="font-size:0.72rem;color:#64748b;" id="last-updated">Connecting…</span>
+    <button class="nav-btn test-btn" onclick="sendTestNotification()" title="Send a test ntfy notification">
+      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Test Alert
+    </button>
+    <button class="nav-btn" id="pause-btn" onclick="togglePause()">
+      <svg id="pause-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      <span id="pause-label">Pause Alerts</span>
+    </button>
     <div class="agent-badge ok" id="agent-badge">
       <div class="agent-dot"></div>
       <span id="agent-label">Agent online</span>
@@ -119,9 +131,79 @@
 <script>
 const SUPABASE_URL      = 'https://cdahcsbixbeicbkedvrf.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkYWhjc2JpeGJlaWNia2VkdnJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMDYxMTIsImV4cCI6MjA5MzU4MjExMn0.XyUuvPFFZsxBPUz3NvpOSZ-sxdpSzv39nypwwrHiFeo';
+const NTFY_SERVER       = 'https://ntfy.sh';
+const NTFY_TOPIC        = 'workassist-mark-2026';
 
 const AGENT_WARN_MS = 3  * 60 * 1000;
 const AGENT_DEAD_MS = 10 * 60 * 1000;
+
+let isPaused = false;
+
+async function loadPauseState() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/meta?key=eq.monitoring_paused&select=value`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+    });
+    const data = await res.json();
+    isPaused = data.length > 0 && data[0].value === 'true';
+    updatePauseButton();
+  } catch (_) {}
+}
+
+async function togglePause() {
+  isPaused = !isPaused;
+  updatePauseButton();
+  const nowIso = new Date().toISOString();
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/meta`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({ key: 'monitoring_paused', value: String(isPaused), updated_at: nowIso }),
+    });
+  } catch (_) {}
+}
+
+function updatePauseButton() {
+  const btn = document.getElementById('pause-btn');
+  const label = document.getElementById('pause-label');
+  const icon = document.getElementById('pause-icon');
+  if (isPaused) {
+    btn.classList.add('paused');
+    label.textContent = 'Resume Alerts';
+    icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+  } else {
+    btn.classList.remove('paused');
+    label.textContent = 'Pause Alerts';
+    icon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+  }
+}
+
+async function sendTestNotification() {
+  const btn = document.querySelector('.test-btn');
+  const orig = btn.innerHTML;
+  btn.innerHTML = '…sending';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${NTFY_SERVER}/${NTFY_TOPIC}`, {
+      method: 'POST',
+      headers: {
+        Title: '🔔 System Monitor — Cloud Test',
+        Priority: 'default',
+        Tags: 'bell',
+      },
+      body: `Test notification from Cloud Dashboard\nTime: ${new Date().toLocaleString()}`,
+    });
+    btn.innerHTML = res.ok ? '✓ Sent' : '✗ Failed';
+  } catch (_) {
+    btn.innerHTML = '✗ Failed';
+  }
+  setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 2500);
+}
 
 function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -268,6 +350,7 @@ async function loadDevices() {
   }
 }
 
+loadPauseState();
 loadDevices();
 setInterval(loadDevices, 15000);
 </script>
