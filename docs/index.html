@@ -212,8 +212,9 @@ async function sendTestNotification() {
       method: 'POST',
       headers: {
         Title: hasDown ? `System Monitor - ${down} Device(s) Offline` : 'System Monitor - All Systems Online',
-        Priority: hasDown ? 'high' : 'default',
+        Priority: hasDown ? 'max' : 'default',
         Tags: hasDown ? 'rotating_light' : 'white_check_mark',
+        Click: 'https://markbritton-hue.github.io/systemmonitor/',
         'Content-Type': 'text/plain',
       },
       body,
