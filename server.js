@@ -181,16 +181,19 @@ async function sendNtfy(deviceId, newStatus) {
   if (!topic) return;
 
   const server = settings.ntfyServer || 'https://ntfy.sh';
-  const emoji = newStatus === 'up' ? '✅' : '🔴';
-  const title = `${emoji} ${device.name} is ${newStatus.toUpperCase()}`;
+  const title = newStatus === 'up'
+    ? `${device.name} is BACK ONLINE`
+    : `${device.name} is OFFLINE`;
   const body = `Host: ${device.host || device.url}\nTime: ${new Date().toLocaleString()}`;
+  const cloudUrl = 'https://markbritton-hue.github.io/systemmonitor/';
 
   try {
     await axios.post(`${server}/${topic}`, body, {
       headers: {
         Title: title,
-        Priority: newStatus === 'down' ? 'urgent' : 'default',
+        Priority: newStatus === 'down' ? 'max' : 'default',
         Tags: newStatus === 'down' ? 'rotating_light' : 'white_check_mark',
+        Click: cloudUrl,
       },
     });
   } catch (err) {

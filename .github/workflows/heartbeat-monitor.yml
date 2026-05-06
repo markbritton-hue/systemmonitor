@@ -102,9 +102,10 @@ jobs:
             if [ "$TIME_SINCE_ALERT" -gt "$ALERT_COOLDOWN" ] || [ "$LAST_ALERT" = "recovered" ]; then
               echo "Sending offline alert (agent ${AGE_MIN}m stale)"
               curl -sf -X POST "$NTFY_SERVER/$NTFY_TOPIC" \
-                -H "Title: 🔴 System Monitor — Agent Offline" \
-                -H "Priority: urgent" \
+                -H "Title: System Monitor - Agent Offline" \
+                -H "Priority: max" \
                 -H "Tags: rotating_light" \
+                -H "Click: https://markbritton-hue.github.io/systemmonitor/" \
                 -d "Local monitoring agent has not reported in ${AGE_MIN} minutes. Internet or server may be down." || true
 
               # Record alert sent
@@ -124,9 +125,10 @@ jobs:
             if [ -n "$LAST_ALERT" ] && [ "$LAST_ALERT" != "recovered" ]; then
               echo "Agent recovered — sending recovery notification"
               curl -sf -X POST "$NTFY_SERVER/$NTFY_TOPIC" \
-                -H "Title: ✅ System Monitor — Agent Back Online" \
+                -H "Title: System Monitor - Agent Back Online" \
                 -H "Priority: default" \
                 -H "Tags: white_check_mark" \
+                -H "Click: https://markbritton-hue.github.io/systemmonitor/" \
                 -d "Local monitoring agent is reporting again. All checks resuming." || true
 
               NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
