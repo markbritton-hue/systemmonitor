@@ -17,7 +17,7 @@ jobs:
           NTFY_SERVER:   ${{ secrets.NTFY_SERVER }}
         run: |
           NTFY_SERVER="${NTFY_SERVER:-https://ntfy.sh}"
-          STALE_THRESHOLD=10       # TEMP TEST — normally 600
+          STALE_THRESHOLD=600      # 10 minutes — agent considered offline
           ALERT_COOLDOWN=3600      # 1 hour — minimum gap between repeat alerts
 
           # ── Check if monitoring is paused ─────────────────────────────────
