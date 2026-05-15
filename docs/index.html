@@ -65,7 +65,6 @@
     .badge-http    { background: rgba(46,16,101,0.8); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.25); }
     .badge-service { background: rgba(69,26,3,0.8);  color: #fcd34d; border: 1px solid rgba(245,158,11,0.25); }
     .badge-cloud   { background: rgba(6,36,52,0.8);  color: #67e8f9; border: 1px solid rgba(6,182,212,0.25); }
-    .badge-actions { background: rgba(39,18,70,0.8); color: #d8b4fe; border: 1px solid rgba(168,85,247,0.3); }
     .device-card-body { padding: 14px 16px; }
     .status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
     .status-dot { width: 12px; height: 12px; border-radius: 50%; background: #64748b; flex-shrink: 0; }
@@ -251,7 +250,7 @@ function formatMs(ms) {
   return ms < 1000 ? ms + 'ms' : (ms/1000).toFixed(1) + 's';
 }
 function typeBadge(type) {
-  const map = { ping:['PING','badge-ping'], http:['HTTP','badge-http'], service:['API','badge-service'], cloud:['CLOUD','badge-cloud'], actions:['GH ACTION','badge-actions'] };
+  const map = { ping:['PING','badge-ping'], http:['HTTP','badge-http'], service:['API','badge-service'], cloud:['CLOUD','badge-cloud'] };
   const [label,cls] = map[type] || ['?','badge-ping'];
   return `<span class="type-badge ${cls}">${label}</span>`;
 }
@@ -357,8 +356,7 @@ async function loadDevices() {
     });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const all = await res.json();
-    const devices = all.filter(d => d.id !== 'cloud-dashboard' && d.id !== 'modem-ping');
-    const modemDevice = all.find(d => d.id === 'modem-ping');
+    const devices = all.filter(d => d.id !== 'cloud-dashboard');
     lastDevices = devices;
 
     const up      = devices.filter(d=>d.status==='up').length;
@@ -375,14 +373,13 @@ async function loadDevices() {
 
     const grid = document.getElementById('device-grid');
     const agentCard = renderAgentCard(devices);
-    const modemCard = modemDevice ? renderCard(modemDevice) : '';
     if (!devices.length) {
-      grid.innerHTML = agentCard + modemCard + `<div class="empty-state">
+      grid.innerHTML = agentCard + `<div class="empty-state">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
         <p>No devices yet.<br>Start the local agent to begin syncing.</p>
       </div>`;
     } else {
-      grid.innerHTML = agentCard + modemCard + devices.map(renderCard).join('');
+      grid.innerHTML = agentCard + devices.map(renderCard).join('');
     }
   } catch(err) {
     document.getElementById('device-grid').innerHTML = `<div class="empty-state">
