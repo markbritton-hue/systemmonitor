@@ -14,7 +14,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
-          MODEM_IP="64.85.163.17"
+          MODEM_IP="64.85.163.18"
           DEVICE_ID="modem-ping"
           NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
