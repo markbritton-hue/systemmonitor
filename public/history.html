@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System Monitor — History</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .history-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .days-select {
+      background: #23272f;
+      border: 1px solid #2e3440;
+      border-radius: 8px;
+      padding: 6px 10px;
+      color: #e2e8f0;
+      font-family: inherit;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .days-select:focus { outline: none; border-color: #0078d4; }
+
+    /* Outage table */
+    .outage-table-wrap {
+      background: rgba(22,25,34,0.82);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 14px;
+      overflow-x: auto;
+      backdrop-filter: blur(12px);
+      margin-bottom: 24px;
+    }
+    .outage-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 600px;
+    }
+    .outage-table thead th {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      padding: 10px 14px;
+      text-align: center;
+      background: linear-gradient(to right, rgba(255,255,255,0.025), transparent);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      white-space: nowrap;
+    }
+    .outage-table thead th:first-child { text-align: left; min-width: 130px; }
+    .outage-table tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .outage-table tbody tr:last-child { border-bottom: none; }
+    .outage-table tbody tr:hover { background: rgba(255,255,255,0.025); }
+    .outage-table tbody td {
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      vertical-align: middle;
+      text-align: center;
+    }
+    .outage-table tbody td:first-child {
+      text-align: left;
+      font-weight: 600;
+      color: #e2e8f0;
+      white-space: nowrap;
+    }
+
+    .cell-clean {
+      color: #334155;
+      font-size: 0.7rem;
+    }
+    .cell-outage {
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 4px 6px;
+      white-space: nowrap;
+    }
+    .cell-outage.sev-low    { background: rgba(180,83,9,0.25);  color: #fcd34d; border: 1px solid rgba(245,158,11,0.25); }
+    .cell-outage.sev-med    { background: rgba(154,52,18,0.3);  color: #fb923c; border: 1px solid rgba(249,115,22,0.3); }
+    .cell-outage.sev-high   { background: rgba(127,29,29,0.4);  color: #f87171; border: 1px solid rgba(220,38,38,0.35); }
+    .cell-outage.sev-severe { background: rgba(127,29,29,0.6);  color: #fca5a5; border: 1px solid rgba(220,38,38,0.5); }
+
+    .th-date-today { color: #38bdf8 !important; }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 0.73rem;
+      color: #64748b;
+      margin-bottom: 16px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-swatch {
+      width: 14px; height: 14px; border-radius: 3px;
+    }
+    .legend-swatch.sev-low    { background: rgba(180,83,9,0.35);  border: 1px solid rgba(245,158,11,0.4); }
+    .legend-swatch.sev-med    { background: rgba(154,52,18,0.45); border: 1px solid rgba(249,115,22,0.45); }
+    .legend-swatch.sev-high   { background: rgba(127,29,29,0.5);  border: 1px solid rgba(220,38,38,0.45); }
+    .legend-swatch.sev-severe { background: rgba(127,29,29,0.7);  border: 1px solid rgba(220,38,38,0.6); }
+
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 12px;
+    }
+
+    /* Detail list */
+    .outage-list { display: flex; flex-direction: column; gap: 8px; }
+    .outage-event {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(22,25,34,0.82);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-left: 3px solid #dc2626;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.8rem;
+    }
+    .outage-event.ongoing { border-left-color: #f97316; }
+    .outage-event-device { font-weight: 700; color: #e2e8f0; min-width: 130px; }
+    .outage-event-time { color: #94a3b8; flex: 1; }
+    .outage-event-dur { font-weight: 700; color: #f87171; white-space: nowrap; }
+    .outage-event.ongoing .outage-event-dur { color: #f97316; }
+    .ongoing-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: rgba(249,115,22,0.2);
+      border: 1px solid rgba(249,115,22,0.4);
+      color: #f97316;
+      border-radius: 4px;
+      padding: 2px 6px;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="index.html">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+    </svg>
+    System Monitor
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Dashboard</a>
+    <a class="nav-link" href="manage.html">Manage</a>
+    <a class="nav-link active" href="history.html">History</a>
+    <a class="nav-link" href="settings.html">Settings</a>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Outage History</div>
+      <div class="page-subtitle" id="subtitle">Loading…</div>
+    </div>
+    <div class="history-controls">
+      <label for="days-select" style="font-size:0.8rem;color:#64748b;">Show last</label>
+      <select class="days-select" id="days-select" onchange="load()">
+        <option value="7">7 days</option>
+        <option value="14" selected>14 days</option>
+        <option value="30">30 days</option>
+        <option value="90">90 days</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Heatmap table -->
+  <div class="section-title">Daily Offline Time</div>
+  <div class="legend">
+    <span>Offline per day:</span>
+    <span class="legend-item"><span class="legend-swatch sev-low"></span>&lt; 30 min</span>
+    <span class="legend-item"><span class="legend-swatch sev-med"></span>30 min – 2 h</span>
+    <span class="legend-item"><span class="legend-swatch sev-high"></span>2 – 8 h</span>
+    <span class="legend-item"><span class="legend-swatch sev-severe"></span>&gt; 8 h</span>
+  </div>
+  <div class="outage-table-wrap" id="table-wrap">
+    <div class="empty-state"><p>Loading…</p></div>
+  </div>
+
+  <!-- Recent events -->
+  <div class="section-title" style="margin-top:8px;">Individual Outage Events</div>
+  <div id="event-list" class="outage-list">
+    <div class="empty-state"><p>Loading…</p></div>
+  </div>
+</div>
+
+<script>
+function fmtDur(ms) {
+  if (!ms) return null;
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  if (d > 0) return `${d}d ${h % 24}h`;
+  if (h > 0) return `${h}h ${m % 60}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
+}
+
+function sevClass(ms) {
+  const m = ms / 60000;
+  if (m < 30)   return 'sev-low';
+  if (m < 120)  return 'sev-med';
+  if (m < 480)  return 'sev-high';
+  return 'sev-severe';
+}
+
+function localDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+
+function fmtDateHeader(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const today = new Date();
+  const isToday = localDateKey(today) === dateStr;
+  const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return { label, isToday };
+}
+
+function fmtDateTime(iso) {
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+async function load() {
+  const days = document.getElementById('days-select').value;
+  const res = await fetch(`/api/outages?days=${days}`);
+  const { summary, deviceNames, events } = await res.json();
+
+  // Build date range (newest first for display)
+  const dates = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(localDateKey(d));
+  }
+
+  const deviceIds = Object.keys(summary);
+  // Add devices with no outages but known names
+  for (const id of Object.keys(deviceNames)) {
+    if (!deviceIds.includes(id)) deviceIds.push(id);
+  }
+
+  document.getElementById('subtitle').textContent =
+    `${deviceIds.length} device(s) · last ${days} days`;
+
+  // ── Heatmap table ──
+  if (!deviceIds.length) {
+    document.getElementById('table-wrap').innerHTML =
+      '<div class="empty-state"><p>No outage data yet — it will appear once devices go down and come back up.</p></div>';
+  } else {
+    let html = '<table class="outage-table"><thead><tr><th>Device</th>';
+    for (const d of dates) {
+      const { label, isToday } = fmtDateHeader(d);
+      html += `<th class="${isToday ? 'th-date-today' : ''}">${label}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    for (const id of deviceIds) {
+      const name = deviceNames[id] || id;
+      const dayData = summary[id] || {};
+      html += `<tr><td>${escHtml(name)}</td>`;
+      for (const d of dates) {
+        const ms = dayData[d] || 0;
+        if (!ms) {
+          html += `<td><span class="cell-clean">—</span></td>`;
+        } else {
+          const sc = sevClass(ms);
+          html += `<td><span class="cell-outage ${sc}">${fmtDur(ms)}</span></td>`;
+        }
+      }
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+    document.getElementById('table-wrap').innerHTML = html;
+  }
+
+  // ── Event list ──
+  const listEl = document.getElementById('event-list');
+  const allEvents = events || [];
+  if (!allEvents.length) {
+    listEl.innerHTML = '<div class="empty-state"><p>No outage events recorded yet.</p></div>';
+    return;
+  }
+
+  allEvents.sort((a, b) => new Date(b.start) - new Date(a.start));
+
+  let html = '';
+  for (const e of allEvents) {
+    const name = deviceNames[e.deviceId] || e.deviceId;
+    const dur = e.ongoing
+      ? fmtDur(Date.now() - new Date(e.start).getTime())
+      : fmtDur(new Date(e.end) - new Date(e.start));
+    const timeStr = e.ongoing
+      ? `Started ${fmtDateTime(e.start)}`
+      : `${fmtDateTime(e.start)} → ${fmtDateTime(e.end)}`;
+    html += `
+    <div class="outage-event${e.ongoing ? ' ongoing' : ''}">
+      <div class="outage-event-device">${escHtml(name)}</div>
+      <div class="outage-event-time">${timeStr}</div>
+      ${e.ongoing ? '<span class="ongoing-badge">Ongoing</span>' : ''}
+      <div class="outage-event-dur">${dur}</div>
+    </div>`;
+  }
+  listEl.innerHTML = html;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+load();
+</script>
+</body>
+</html>

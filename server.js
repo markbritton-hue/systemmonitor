@@ -10,6 +10,7 @@ const PORT = 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const EQUIPMENT_FILE = path.join(DATA_DIR, 'equipment.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const OUTAGES_FILE = path.join(DATA_DIR, 'outages.json');
 // ── Supabase sync ─────────────────────────────────────────────────────────────
 
 async function syncToSupabase(deviceId) {
@@ -100,6 +101,22 @@ function saveSettings(s) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(s, null, 2));
 }
 
+function loadOutages() {
+  try {
+    return JSON.parse(fs.readFileSync(OUTAGES_FILE, 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+function appendOutage(deviceId, start, end) {
+  const outages = loadOutages();
+  outages.push({ deviceId, start: new Date(start).toISOString(), end: new Date(end).toISOString() });
+  // Keep only last 90 days
+  const cutoff = new Date(Date.now() - 90 * 86400000).toISOString();
+  fs.writeFileSync(OUTAGES_FILE, JSON.stringify(outages.filter(o => o.end >= cutoff), null, 2));
+}
+
 // ── In-memory status store ────────────────────────────────────────────────────
 
 // { [id]: { status, responseTime, lastCheck, lastChange, message, history } }
@@ -148,9 +165,9 @@ function updateStatus(id, newStatus, responseTime, message) {
       sendNtfy(id, 'down');
     }
   } else if (newStatus === 'up') {
-    if (prevStatus === 'down' && notifyDownSent) {
-      // Only send recovery if we actually sent a down alert
-      sendNtfy(id, 'up');
+    if (prevStatus === 'down') {
+      if (notifyDownSent) sendNtfy(id, 'up');
+      if (downSince) appendOutage(id, downSince, now);
     }
     downSince = null;
     notifyDownSent = false;
@@ -484,6 +501,41 @@ app.post('/api/settings', (req, res) => {
   const updated = { ...current, ...req.body };
   saveSettings(updated);
   res.json(updated);
+});
+
+// Outage history
+app.get('/api/outages', (req, res) => {
+  const days = Math.min(parseInt(req.query.days) || 14, 90);
+  const cutoffMs = Date.now() - days * 86400000;
+
+  const outages = loadOutages().filter(o => new Date(o.end).getTime() >= cutoffMs);
+
+  // Include ongoing outages for currently-down devices
+  for (const [id, s] of Object.entries(statusMap)) {
+    if (s.status === 'down' && s.downSince) {
+      outages.push({ deviceId: id, start: new Date(s.downSince).toISOString(), end: new Date().toISOString(), ongoing: true });
+    }
+  }
+
+  // Aggregate ms-offline per device per local date, splitting outages that span midnight
+  const summary = {};
+  for (const o of outages) {
+    if (!summary[o.deviceId]) summary[o.deviceId] = {};
+    let cur = Math.max(new Date(o.start).getTime(), cutoffMs);
+    const end = new Date(o.end).getTime();
+    while (cur < end) {
+      const d = new Date(cur);
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+      const segEnd = Math.min(end, dayEnd);
+      summary[o.deviceId][dateKey] = (summary[o.deviceId][dateKey] || 0) + (segEnd - cur);
+      cur = dayEnd;
+    }
+  }
+
+  const equipment = loadEquipment();
+  const deviceNames = Object.fromEntries(equipment.map(e => [e.id, e.name]));
+  res.json({ summary, deviceNames, days, events: outages });
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────

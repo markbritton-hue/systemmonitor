@@ -1,0 +1,94 @@
+name: Ping Modem
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping modem and sync to Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          MODEM_IP="64.85.163.17"
+          DEVICE_ID="modem-ping"
+          NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+
+          # Ping — 3 packets, 5s timeout
+          if ping -c 3 -W 5 "$MODEM_IP" > /tmp/ping_out.txt 2>&1; then
+            STATUS="up"
+            # Extract average RTT from ping output (e.g. rtt min/avg/max/mdev = 12.3/14.5/16.7/1.2 ms)
+            AVG_MS=$(grep -oP 'rtt.*?= [\d.]+/\K[\d.]+' /tmp/ping_out.txt | head -1)
+            if [ -n "$AVG_MS" ]; then
+              MS=$(python3 -c "print(round(float('$AVG_MS')))")
+              MESSAGE="Ping OK (${MS}ms)"
+            else
+              MS="null"
+              MESSAGE="Ping OK"
+            fi
+          else
+            STATUS="down"
+            MS="null"
+            MESSAGE="Host unreachable"
+          fi
+
+          echo "Status: $STATUS — $MESSAGE"
+
+          # Fetch existing row to preserve last_change and history
+          EXISTING=$(curl -sf \
+            "$SUPABASE_URL/rest/v1/devices?id=eq.$DEVICE_ID&select=status,last_change,history" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY") || EXISTING="[]"
+
+          # Build updated history and last_change using python
+          RESULT=$(python3 -c "
+          import json, sys
+
+          existing = json.loads('$EXISTING')
+          row = existing[0] if existing else {}
+
+          prev_status = row.get('status', '')
+          history = row.get('history') or []
+          last_change = row.get('last_change', '$NOW')
+
+          history.append('$STATUS' == 'up')
+          if len(history) > 10:
+              history = history[-10:]
+
+          # Only update last_change on status transition
+          if prev_status != '$STATUS':
+              last_change = '$NOW'
+
+          print(json.dumps({'history': history, 'last_change': last_change}))
+          ")
+
+          HISTORY=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d['history']))")
+          LAST_CHANGE=$(echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['last_change'])")
+
+          MS_VAL=$([ "$MS" = "null" ] && echo "null" || echo "$MS")
+
+          curl -sf -X POST "$SUPABASE_URL/rest/v1/devices" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: resolution=merge-duplicates" \
+            -d "{
+              \"id\": \"$DEVICE_ID\",
+              \"name\": \"WAN Modem\",
+              \"host\": \"$MODEM_IP\",
+              \"type\": \"actions\",
+              \"enabled\": true,
+              \"status\": \"$STATUS\",
+              \"response_time\": $MS_VAL,
+              \"message\": \"$MESSAGE\",
+              \"last_check\": \"$NOW\",
+              \"last_change\": \"$LAST_CHANGE\",
+              \"agent_heartbeat\": \"$NOW\",
+              \"history\": $HISTORY
+            }"
+
+          echo "Supabase updated."

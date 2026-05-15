@@ -18,6 +18,7 @@
   <div class="nav-links">
     <a class="nav-link active" href="index.html">Dashboard</a>
     <a class="nav-link" href="manage.html">Manage</a>
+    <a class="nav-link" href="history.html">History</a>
     <a class="nav-link" href="settings.html">Settings</a>
   </div>
   <div class="nav-right">
@@ -51,6 +52,10 @@
       <div class="stat-chip">
         <span class="stat-chip-label">Unknown</span>
         <span class="stat-chip-value" id="stat-unknown">—</span>
+      </div>
+      <div class="stat-chip uptime" id="stat-uptime-chip">
+        <span class="stat-chip-label">Uptime</span>
+        <span class="stat-chip-value" id="stat-uptime">—</span>
       </div>
     </div>
   </div>
@@ -96,6 +101,18 @@ function timeAgo(iso) {
   if (diff < 60) return diff + 's ago';
   if (diff < 3600) return Math.floor(diff/60) + 'm ago';
   return Math.floor(diff/3600) + 'h ago';
+}
+
+function formatDuration(iso) {
+  if (!iso) return null;
+  const secs = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (secs < 60) return secs + 's';
+  const m = Math.floor(secs / 60) % 60;
+  const h = Math.floor(secs / 3600) % 24;
+  const d = Math.floor(secs / 86400);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 function renderCloudCard(d) {
@@ -150,6 +167,9 @@ function renderCard(d) {
       <div class="device-meta">
         <div class="meta-item">Response: <strong>${formatMs(d.responseTime)}</strong></div>
         <div class="meta-item">Checked: <strong>${timeAgo(d.lastCheck)}</strong></div>
+        ${d.lastChange ? `<div class="meta-item uptime-meta ${sc}">
+          ${sc === 'up' ? 'Up' : sc === 'down' ? 'Down' : 'Status'} for: <strong>${formatDuration(d.lastChange)}</strong>
+        </div>` : ''}
         ${d.notifyAfterMinutes ? `<div class="meta-item">Alert after: <strong>${d.notifyAfterMinutes}m offline</strong></div>` : ''}
       </div>
       ${sparkline(d.history)}
@@ -204,10 +224,18 @@ async function loadStatus() {
     const up = monitored.filter(d => d.status === 'up').length;
     const down = monitored.filter(d => d.status === 'down').length;
     const unknown = monitored.filter(d => d.status === 'unknown').length;
+    // Uptime % from history across all monitored devices
+    const allChecks = monitored.flatMap(d => d.history || []);
+    const uptimePct = allChecks.length
+      ? Math.round((allChecks.filter(Boolean).length / allChecks.length) * 100)
+      : null;
+    const uptimeChip = document.getElementById('stat-uptime-chip');
     document.getElementById('stat-total').textContent = total;
     document.getElementById('stat-up').textContent = up;
     document.getElementById('stat-down').textContent = down;
     document.getElementById('stat-unknown').textContent = unknown;
+    document.getElementById('stat-uptime').textContent = uptimePct != null ? uptimePct + '%' : '—';
+    uptimeChip.className = 'stat-chip uptime' + (uptimePct === 100 ? ' up' : uptimePct != null && uptimePct < 80 ? ' down' : '');
     document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 
     // Detect status changes for toasts
