@@ -78,7 +78,7 @@ jobs:
             -H "Prefer: resolution=merge-duplicates" \
             -d "{
               \"id\": \"$DEVICE_ID\",
-              \"name\": \"WAN Modem\",
+              \"name\": \"BlueBird Modem\",
               \"host\": \"$MODEM_IP\",
               \"type\": \"actions\",
               \"enabled\": true,
