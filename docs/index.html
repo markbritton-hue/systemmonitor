@@ -82,7 +82,8 @@
     .meta-item strong { color: #e2e8f0; }
     .sparkline { display: flex; gap: 3px; align-items: center; margin-bottom: 4px; }
     .spark-dot { width: 7px; height: 7px; border-radius: 50%; background: #2e3440; }
-    .spark-dot.ok  { background: rgba(34,197,94,0.35); animation: dot-run 2s ease-in-out infinite; }
+    .spark-dot.ok   { background: rgba(34,197,94,0.35); animation: dot-run 2s ease-in-out infinite; }
+    .spark-dot.warn { background: #fbbf24; }
     .spark-dot.ok:nth-child(1)  { animation-delay:0s }
     .spark-dot.ok:nth-child(2)  { animation-delay:0.2s }
     .spark-dot.ok:nth-child(3)  { animation-delay:0.4s }
@@ -92,7 +93,9 @@
     .spark-dot.ok:nth-child(7)  { animation-delay:1.2s }
     .spark-dot.ok:nth-child(8)  { animation-delay:1.4s }
     .spark-dot.ok:nth-child(9)  { animation-delay:1.6s }
-    .spark-dot.ok:nth-child(10) { animation-delay:1.8s }
+    .spark-dot.ok:nth-child(10) { animation-delay:1.6s }
+    .spark-dot.ok:nth-child(11) { animation-delay:1.7s }
+    .spark-dot.ok:nth-child(12) { animation-delay:1.9s }
     .spark-dot.err { background: #dc2626; }
     .pending-alert { font-size: 0.72rem; color: #fbbf24; margin-bottom: 8px; display: flex; align-items: center; gap: 5px; }
     .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 60px 20px; color: #64748b; text-align: center; grid-column: 1/-1; }
@@ -334,8 +337,32 @@ function typeBadge(type) {
   return `<span class="type-badge ${cls}">${label}</span>`;
 }
 function sparkline(history) {
-  if (!history||!history.length) return '<div class="sparkline"></div>';
-  return '<div class="sparkline">'+history.map(ok=>`<div class="spark-dot ${ok?'ok':'err'}"></div>`).join('')+'</div>';
+  if (!history || !history.length) return '<div class="sparkline"></div>';
+  const isTimestamped = history.length > 0 && typeof history[0] === 'object';
+  if (!isTimestamped) {
+    return '<div class="sparkline">' +
+      history.map(ok => `<div class="spark-dot ${ok?'ok':'err'}"></div>`).join('') + '</div>';
+  }
+  const now = Date.now();
+  const bucketMs = 5 * 60 * 1000;
+  const numBuckets = 12;
+  const dots = [];
+  for (let i = numBuckets - 1; i >= 0; i--) {
+    const start = now - (i + 1) * bucketMs;
+    const end   = now - i * bucketMs;
+    const entries = history.filter(e => { const t = new Date(e.ts).getTime(); return t >= start && t < end; });
+    const timeLabel = new Date(start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) +
+      ' – ' + new Date(end).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    if (!entries.length) {
+      dots.push(`<div class="spark-dot" title="${timeLabel}: no data"></div>`);
+    } else {
+      const pct = entries.filter(e => e.ok).length / entries.length;
+      const cls = pct >= 0.8 ? 'ok' : pct >= 0.2 ? 'warn' : 'err';
+      const label = pct === 1 ? 'Online' : pct === 0 ? 'Offline' : `${Math.round(pct*100)}% online`;
+      dots.push(`<div class="spark-dot ${cls}" title="${timeLabel}: ${label}"></div>`);
+    }
+  }
+  return '<div class="sparkline" title="Last 60 min (5-min buckets)">' + dots.join('') + '</div>';
 }
 function statusClass(s) { return s==='up'?'up':s==='down'?'down':'unknown'; }
 
