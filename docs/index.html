@@ -85,6 +85,7 @@
     .sparkline { display:flex; gap:4px; align-items:flex-end; margin-bottom:4px; }
     .spark-bucket { display:flex; flex-direction:column; align-items:center; gap:3px; }
     .spark-lbl { font-size:0.48rem; color:#94a3b8; white-space:nowrap; line-height:1; }
+    .spark-lbl.current { font-size:0.62rem; color:#e2e8f0; font-weight:700; }
     .spark-dot.ok   { background: rgba(34,197,94,0.35); animation: dot-run 2s ease-in-out infinite; }
     .spark-dot.warn { background: #fbbf24; }
     .spark-dot.err  { background: #dc2626; }
@@ -359,13 +360,14 @@ function sparkline(history) {
     const d = new Date(start);
     const lbl = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
     const timeLabel = lbl + ' – ' + (() => { const e = new Date(end); return e.getHours() + ':' + String(e.getMinutes()).padStart(2,'0'); })();
+    const lblCls = i === 0 ? 'spark-lbl current' : 'spark-lbl';
     if (!entries.length) {
-      dots.push(`<div class="spark-bucket"><div class="spark-dot" title="${timeLabel}: no data"></div><div class="spark-lbl">${lbl}</div></div>`);
+      dots.push(`<div class="spark-bucket"><div class="spark-dot" title="${timeLabel}: no data"></div><div class="${lblCls}">${lbl}</div></div>`);
     } else {
       const pct = entries.filter(e => e.ok).length / entries.length;
       const cls = pct >= 0.8 ? 'ok' : pct >= 0.2 ? 'warn' : 'err';
       const statusLabel = pct === 1 ? 'Online' : pct === 0 ? 'Offline' : `${Math.round(pct*100)}% online`;
-      dots.push(`<div class="spark-bucket"><div class="spark-dot ${cls}" title="${timeLabel}: ${statusLabel}"></div><div class="spark-lbl">${lbl}</div></div>`);
+      dots.push(`<div class="spark-bucket"><div class="spark-dot ${cls}" title="${timeLabel}: ${statusLabel}"></div><div class="${lblCls}">${lbl}</div></div>`);
     }
   }
   return '<div class="sparkline">' + dots.join('') + '</div>';
