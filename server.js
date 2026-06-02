@@ -29,6 +29,7 @@ async function syncToSupabase(deviceId) {
     host: device.host || device.url,
     type: device.type,
     enabled: device.enabled,
+    ping_source: device.pingSource || 'local',
     status: status.status,
     response_time: status.responseTime,
     last_check: status.lastCheck,
@@ -55,6 +56,63 @@ async function syncToSupabase(deviceId) {
     );
   } catch (err) {
     console.error('Supabase sync error:', err.response?.data?.message || err.message);
+  }
+}
+
+async function syncDeviceConfig(device) {
+  const settings = loadSettings();
+  const { supabaseUrl, supabaseKey } = settings;
+  if (!supabaseUrl || !supabaseKey) return;
+  const row = {
+    id: device.id,
+    name: device.name,
+    host: device.host || device.url,
+    type: device.type,
+    enabled: device.enabled,
+    ping_source: device.pingSource || 'local',
+    agent_heartbeat: new Date().toISOString(),
+  };
+  try {
+    await axios.post(`${supabaseUrl}/rest/v1/devices`, row, {
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+    });
+  } catch (err) {
+    console.error('Supabase config sync error:', err.message);
+  }
+}
+
+async function pollCloudDevices() {
+  const settings = loadSettings();
+  const { supabaseUrl, supabaseKey } = settings;
+  if (!supabaseUrl || !supabaseKey) return;
+  const equipment = loadEquipment();
+  const cloudDevices = equipment.filter(d => d.type === 'ping' && d.pingSource === 'cloud' && d.enabled);
+  if (!cloudDevices.length) return;
+  try {
+    const ids = cloudDevices.map(d => `"${d.id}"`).join(',');
+    const res = await axios.get(
+      `${supabaseUrl}/rest/v1/devices?id=in.(${ids})&select=id,status,response_time,last_check,last_change,message,history`,
+      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+    );
+    for (const row of res.data) {
+      const prev = statusMap[row.id];
+      statusMap[row.id] = {
+        id: row.id,
+        status: row.status || 'unknown',
+        responseTime: row.response_time,
+        lastCheck: row.last_check,
+        lastChange: row.last_change,
+        message: row.message || '',
+        history: row.history || (prev ? prev.history : []),
+      };
+    }
+  } catch (err) {
+    console.error('Cloud device poll error:', err.message);
   }
 }
 
@@ -93,7 +151,7 @@ function loadSettings() {
   try {
     return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
   } catch {
-    return { ntfyTopic: '', ntfyServer: 'https://ntfy.sh', defaultInterval: 60 };
+    return { ntfyTopic: '', ntfyServer: 'https://ntfy.sh', defaultInterval: 15 };
   }
 }
 
@@ -142,8 +200,8 @@ function updateStatus(id, newStatus, responseTime, message) {
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const history = prev ? [...prev.history] : [];
-  history.push(newStatus === 'up');
-  if (history.length > 10) history.shift();
+  history.push({ ok: newStatus === 'up', ts: nowIso });
+  if (history.length > 300) history.shift();
 
   const equipment = loadEquipment();
   const device = equipment.find(e => e.id === id);
@@ -245,8 +303,8 @@ async function checkCloudHeartbeat() {
       newStatus = ageMs < CLOUD_HB_MAX_MS ? 'up' : 'down';
       message = newStatus === 'up' ? `Last seen ${ageMin}m ago` : `No heartbeat for ${ageMin}m`;
     }
-    history.push(newStatus === 'up');
-    if (history.length > 10) history.shift();
+    history.push({ ok: newStatus === 'up', ts: new Date().toISOString() });
+    if (history.length > 300) history.shift();
     const nowIso = new Date().toISOString();
     statusMap[CLOUD_HB_ID] = {
       id: CLOUD_HB_ID,
@@ -316,6 +374,10 @@ async function checkService(device) {
 
 async function checkDevice(device) {
   if (!device.enabled) return;
+  if (device.type === 'ping' && device.pingSource === 'cloud') {
+    await syncDeviceConfig(device);
+    return;
+  }
   switch (device.type) {
     case 'ping':    await checkPing(device);    break;
     case 'http':    await checkHttp(device);    break;
@@ -335,7 +397,7 @@ function scheduleDevice(device) {
 
   // Run immediately then on interval
   checkDevice(device);
-  timers[device.id] = setInterval(() => checkDevice(device), (device.intervalSeconds || 60) * 1000);
+  timers[device.id] = setInterval(() => checkDevice(device), (device.intervalSeconds || 15) * 1000);
 }
 
 async function restoreDownSince() {
@@ -375,6 +437,8 @@ async function startMonitoring() {
   console.log(`Monitoring ${equipment.length} device(s)`);
   checkCloudHeartbeat();
   setInterval(checkCloudHeartbeat, 20 * 1000);
+  pollCloudDevices();
+  setInterval(pollCloudDevices, 60 * 1000);
 }
 
 function rescheduleAll() {
@@ -407,9 +471,10 @@ app.post('/api/equipment', (req, res) => {
     type: req.body.type || 'ping',
     url: req.body.url || '',
     expectedContent: req.body.expectedContent || '',
-    intervalSeconds: Number(req.body.intervalSeconds) || settings.defaultInterval || 60,
+    intervalSeconds: Number(req.body.intervalSeconds) || settings.defaultInterval || 15,
     notifyAfterMinutes: Number(req.body.notifyAfterMinutes) || 0,
     ntfyTopic: req.body.ntfyTopic || '',
+    pingSource: req.body.pingSource || 'local',
     enabled: req.body.enabled !== false,
   };
   list.push(device);

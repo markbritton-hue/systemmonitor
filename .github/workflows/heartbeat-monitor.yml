@@ -20,6 +20,66 @@ jobs:
           STALE_THRESHOLD=600      # 10 minutes — agent considered offline
           ALERT_COOLDOWN=3600      # 1 hour — minimum gap between repeat alerts
 
+          # ── Write cloud-dashboard heartbeat ───────────────────────────────
+          NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          curl -sf -X POST "$SUPABASE_URL/rest/v1/devices" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: resolution=merge-duplicates" \
+            -d "{\"id\":\"cloud-dashboard\",\"agent_heartbeat\":\"$NOW_ISO\"}" || true
+
+          # ── Ping cloud-monitored devices ──────────────────────────────────
+          CLOUD_DEVICES=$(curl -sf \
+            "$SUPABASE_URL/rest/v1/devices?ping_source=eq.cloud&enabled=eq.true&select=id,host,status,last_change,history" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY") || CLOUD_DEVICES="[]"
+
+          DEVICE_COUNT=$(echo "$CLOUD_DEVICES" | jq 'length')
+          for i in $(seq 0 $((DEVICE_COUNT - 1))); do
+            DEV_ID=$(echo "$CLOUD_DEVICES" | jq -r ".[$i].id")
+            HOST=$(echo "$CLOUD_DEVICES" | jq -r ".[$i].host")
+            PREV_STATUS=$(echo "$CLOUD_DEVICES" | jq -r ".[$i].status // \"unknown\"")
+            PREV_LAST_CHANGE=$(echo "$CLOUD_DEVICES" | jq -r ".[$i].last_change // \"$NOW_ISO\"")
+            PREV_HISTORY=$(echo "$CLOUD_DEVICES" | jq -c ".[$i].history // []")
+            [ -z "$HOST" ] || [ "$HOST" = "null" ] && continue
+
+            START_S=$(date +%s)
+            if ping -c 1 -W 5 "$HOST" > /dev/null 2>&1; then
+              ELAPSED=$(( ($(date +%s) - START_S) * 1000 ))
+              NEW_STATUS="up"
+              MESSAGE="Ping OK (${ELAPSED}ms) [cloud]"
+              RT=$ELAPSED
+            else
+              NEW_STATUS="down"
+              MESSAGE="Host unreachable [cloud]"
+              RT="null"
+            fi
+
+            [ "$NEW_STATUS" = "$PREV_STATUS" ] && LAST_CHANGE="$PREV_LAST_CHANGE" || LAST_CHANGE="$NOW_ISO"
+
+            NEW_HISTORY=$(echo "$PREV_HISTORY" | jq --argjson ok "$([ "$NEW_STATUS" = "up" ] && echo true || echo false)" --arg ts "$NOW_ISO" '. + [{ok: $ok, ts: $ts}] | .[-300:]')
+
+            ROW=$(jq -n \
+              --arg id "$DEV_ID" \
+              --arg status "$NEW_STATUS" \
+              --argjson rt "$RT" \
+              --arg lc "$NOW_ISO" \
+              --arg lch "$LAST_CHANGE" \
+              --arg msg "$MESSAGE" \
+              --argjson hist "$NEW_HISTORY" \
+              '{id: $id, status: $status, response_time: $rt, last_check: $lc, last_change: $lch, message: $msg, history: $hist}')
+
+            curl -sf -X POST "$SUPABASE_URL/rest/v1/devices" \
+              -H "apikey: $SUPABASE_KEY" \
+              -H "Authorization: Bearer $SUPABASE_KEY" \
+              -H "Content-Type: application/json" \
+              -H "Prefer: resolution=merge-duplicates" \
+              -d "$ROW" || true
+
+            echo "$HOST: $NEW_STATUS (${RT}ms)"
+          done
+
           # ── Check if monitoring is paused ─────────────────────────────────
           PAUSED_META=$(curl -sf \
             "$SUPABASE_URL/rest/v1/meta?key=eq.monitoring_paused&select=value" \

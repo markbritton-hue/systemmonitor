@@ -88,6 +88,15 @@
         </div>
       </div>
 
+      <div class="form-group" id="ping-source-group" style="display:none;">
+        <label class="form-label">Ping Source</label>
+        <select class="form-select" id="m-ping-source">
+          <option value="local">Local (this server)</option>
+          <option value="cloud">Cloud (GitHub Actions)</option>
+        </select>
+        <span class="form-hint">Cloud ping runs every 5 minutes from GitHub Actions — useful for external/ISP targets. Local ping runs on your configured interval.</span>
+      </div>
+
       <div class="form-group" id="host-group">
         <label class="form-label" id="host-label">Host / IP Address *</label>
         <input class="form-input" id="m-host" placeholder="192.168.1.1" />
@@ -177,10 +186,13 @@ function statusBadge(status) {
   </div>`;
 }
 
-function typeBadge(type) {
+function typeBadge(type, pingSource) {
   const map = { ping: ['PING','badge-ping'], http: ['HTTP','badge-http'], service: ['API','badge-service'] };
   const [label, cls] = map[type] || ['?','badge-ping'];
-  return `<span class="type-badge ${cls}">${label}</span>`;
+  const cloudTag = (type === 'ping' && pingSource === 'cloud')
+    ? ' <span style="font-size:0.65rem;color:#7c3aed;background:#1e1030;border:1px solid #7c3aed;border-radius:4px;padding:1px 5px;vertical-align:middle;">cloud</span>'
+    : '';
+  return `<span class="type-badge ${cls}">${label}</span>${cloudTag}`;
 }
 
 async function loadPage() {
@@ -213,7 +225,7 @@ function renderTable() {
     const host = d.type === 'ping' ? d.host : d.url;
     return `<tr class="${d.enabled ? '' : 'disabled-row'}" id="row-${d.id}">
       <td><strong>${escHtml(d.name)}</strong>${d.enabled ? '' : ' <span style="font-size:0.68rem;color:#64748b;">(disabled)</span>'}</td>
-      <td>${typeBadge(d.type)}</td>
+      <td>${typeBadge(d.type, d.pingSource)}</td>
       <td style="color:#94a3b8;font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(host)}</td>
       <td style="color:#94a3b8;">${d.intervalSeconds}s${d.notifyAfterMinutes ? ` <span style="font-size:0.68rem;color:#64748b;">/ alert >${d.notifyAfterMinutes}m</span>` : ''}</td>
       <td>${statusBadge(st.status || 'unknown')}</td>
@@ -235,6 +247,7 @@ function onTypeChange() {
   document.getElementById('host-group').style.display = isPing ? '' : 'none';
   document.getElementById('url-group').style.display = isPing ? 'none' : '';
   document.getElementById('content-group').style.display = type === 'service' ? '' : 'none';
+  document.getElementById('ping-source-group').style.display = isPing ? '' : 'none';
 }
 
 function openModal(device = null) {
@@ -248,6 +261,7 @@ function openModal(device = null) {
   document.getElementById('m-interval').value = device ? device.intervalSeconds : '';
   document.getElementById('m-notify-after').value = device ? (device.notifyAfterMinutes || 0) : 0;
   document.getElementById('m-topic').value = device ? device.ntfyTopic : '';
+  document.getElementById('m-ping-source').value = device ? (device.pingSource || 'local') : 'local';
   document.getElementById('m-enabled').checked = device ? device.enabled : true;
   onTypeChange();
   document.getElementById('modal-overlay').classList.add('open');
@@ -278,6 +292,7 @@ async function saveDevice() {
     intervalSeconds: Number(document.getElementById('m-interval').value) || 60,
     notifyAfterMinutes: Number(document.getElementById('m-notify-after').value) || 0,
     ntfyTopic: document.getElementById('m-topic').value.trim(),
+    pingSource: document.getElementById('m-ping-source').value,
     enabled: document.getElementById('m-enabled').checked,
   };
 
