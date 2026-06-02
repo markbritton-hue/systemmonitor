@@ -29,7 +29,6 @@ async function syncToSupabase(deviceId) {
     host: device.host || device.url,
     type: device.type,
     enabled: device.enabled,
-    ping_source: device.pingSource || 'local',
     status: status.status,
     response_time: status.responseTime,
     last_check: status.lastCheck,
@@ -372,9 +371,9 @@ async function checkService(device) {
   }
 }
 
-async function checkDevice(device) {
+async function checkDevice(device, { forceLocal = false } = {}) {
   if (!device.enabled) return;
-  if (device.type === 'ping' && device.pingSource === 'cloud') {
+  if (device.type === 'ping' && device.pingSource === 'cloud' && !forceLocal) {
     await syncDeviceConfig(device);
     return;
   }
@@ -532,7 +531,7 @@ app.post('/api/check/:id', async (req, res) => {
   const list = loadEquipment();
   const device = list.find(e => e.id === req.params.id);
   if (!device) return res.status(404).json({ error: 'Not found' });
-  await checkDevice(device);
+  await checkDevice(device, { forceLocal: true });
   res.json(getStatus(device.id));
 });
 
