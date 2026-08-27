@@ -330,23 +330,28 @@ try {
   $ds.SearchScope = 'OneLevel'
   $ds.PageSize = 1000
   $ds.Filter = '(&(objectCategory=person)(objectClass=user))'
-  [void]$ds.PropertiesToLoad.AddRange(@('samaccountname','displayname','lockouttime','distinguishedname'))
-  $locked = foreach ($r in $ds.FindAll()) {
+  [void]$ds.PropertiesToLoad.AddRange(@('samaccountname','displayname','lockouttime','useraccountcontrol','distinguishedname'))
+  $rows = foreach ($r in $ds.FindAll()) {
     $u = $r.GetDirectoryEntry()
     $u.RefreshCache(@('msDS-User-Account-Control-Computed'))
     $c = [int]($u.Properties['msDS-User-Account-Control-Computed'][0])
-    if ($c -band 0x10) {
+    $uac = [int]($r.Properties['useraccountcontrol'][0])
+    $locked = [bool]($c -band 0x10)
+    $disabled = [bool]($uac -band 0x2)
+    if ($locked -or $disabled) {
       $lt = $r.Properties['lockouttime']
       $ltIso = $null
       if ($lt.Count -gt 0 -and [int64]$lt[0] -gt 0) { $ltIso = ([datetime]::FromFileTimeUtc([int64]$lt[0])).ToString('o') }
       [pscustomobject]@{
         sam = [string]$r.Properties['samaccountname'][0]
         name = [string]$r.Properties['displayname'][0]
+        locked = $locked
+        disabled = $disabled
         lockoutTime = $ltIso
       }
     }
   }
-  @($locked) | ConvertTo-Json -Compress
+  @($rows) | ConvertTo-Json -Compress
 } catch {
   [pscustomobject]@{ error = $_.Exception.Message } | ConvertTo-Json -Compress
 }
@@ -357,12 +362,15 @@ try {
       (err, stdout) => {
         if (err && !stdout) return resolve({ error: err.message });
         const out = (stdout || '').trim();
-        if (!out) return resolve({ accounts: [] });
+        if (!out) return resolve({ locked: [], disabled: [] });
         let parsed;
         try { parsed = JSON.parse(out); } catch { return resolve({ error: 'Could not parse AD query output' }); }
         if (parsed && parsed.error) return resolve({ error: parsed.error });
-        const accounts = Array.isArray(parsed) ? parsed : [parsed];
-        resolve({ accounts });
+        const rows = Array.isArray(parsed) ? parsed : [parsed];
+        resolve({
+          locked: rows.filter(r => r.locked),
+          disabled: rows.filter(r => r.disabled && !r.locked),
+        });
       });
   });
 }
@@ -383,7 +391,8 @@ async function refreshLockedAccounts(force = false) {
     ou,
     checkedAt: new Date().toISOString(),
     error: res.error || null,
-    accounts: res.accounts || [],
+    accounts: res.locked || [],
+    disabled: res.disabled || [],
   };
   lockedCache = { data, at: Date.now() };
   if (!res.error) notifyNewLockouts(data.accounts, ou);
