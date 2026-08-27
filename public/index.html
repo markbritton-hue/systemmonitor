@@ -54,10 +54,42 @@
         <span class="stat-chip-value" id="stat-unknown">—</span>
       </div>
       <div class="stat-chip uptime" id="stat-uptime-chip">
-        <span class="stat-chip-label">Uptime</span>
+        <span class="stat-chip-label">Uptime 24h</span>
         <span class="stat-chip-value" id="stat-uptime">—</span>
       </div>
+      <div class="stat-chip" id="stat-downtime-chip">
+        <span class="stat-chip-label">Downtime 24h</span>
+        <span class="stat-chip-value" id="stat-downtime">—</span>
+      </div>
     </div>
+  </div>
+
+  <!-- IP / ISP Info Card -->
+  <div id="ip-info-card" style="display:flex;align-items:center;gap:16px;background:rgba(22,25,34,0.82);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:14px 20px;margin-bottom:20px;backdrop-filter:blur(12px);flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:10px;color:#0078d4;flex-shrink:0;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+    </div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:3px;">Public IP / ISP</div>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <span style="font-size:1rem;font-weight:700;color:#e2e8f0;font-family:monospace;" id="ip-addr">—</span>
+        <span style="font-size:0.82rem;color:#94a3b8;" id="ip-isp">Loading…</span>
+        <span style="font-size:0.75rem;color:#64748b;" id="ip-location"></span>
+      </div>
+    </div>
+    <div style="font-size:0.68rem;color:#334155;" id="ip-updated"></div>
+  </div>
+
+  <!-- Locked AD Accounts Card -->
+  <div id="locked-accounts-card" style="display:none;align-items:flex-start;gap:16px;background:rgba(22,25,34,0.82);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:14px 20px;margin-bottom:20px;backdrop-filter:blur(12px);">
+    <div id="locked-icon" style="display:flex;align-items:center;gap:10px;color:#64748b;flex-shrink:0;padding-top:2px;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:4px;">Locked AD Accounts — Centreville Users</div>
+      <div id="locked-body" style="font-size:0.9rem;color:#e2e8f0;">Loading…</div>
+    </div>
+    <div style="font-size:0.68rem;color:#334155;flex-shrink:0;" id="locked-updated"></div>
   </div>
 
   <!-- Device Grid -->
@@ -67,12 +99,38 @@
       <p>Loading devices…</p>
     </div>
   </div>
+
+  <!-- Downtime Stats Panel -->
+  <div style="margin-top:32px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:0.85rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;">Downtime Summary</div>
+    </div>
+    <div id="downtime-summary" class="table-wrap">
+      <div class="empty-state" style="padding:24px 20px;"><p>Loading…</p></div>
+    </div>
+  </div>
+
+  <!-- Notifications Panel -->
+  <div style="margin-top:32px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:0.85rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;">
+        Recent Notifications
+      </div>
+      <span style="font-size:0.72rem;color:#64748b;" id="notif-status"></span>
+    </div>
+    <div id="notif-list" style="display:flex;flex-direction:column;gap:6px;">
+      <div class="empty-state" style="padding:24px 20px;">
+        <p>Loading notifications…</p>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div id="toast-container"></div>
 
 <script>
 let prevStatus = {};
+let allNotifications = [];
 
 function typeBadge(type) {
   const map = { ping: ['PING','badge-ping'], http: ['HTTP','badge-http'], service: ['API','badge-service'], cloud: ['CLOUD','badge-cloud'] };
@@ -80,13 +138,43 @@ function typeBadge(type) {
   return `<span class="type-badge ${cls}">${label}</span>`;
 }
 
-function statusClass(s) { return s === 'up' ? 'up' : s === 'down' ? 'down' : 'unknown'; }
+function statusClass(s, slowResponse) {
+  if (s === 'down') return 'down';
+  if (s === 'up' && slowResponse) return 'slow';
+  if (s === 'up') return 'up';
+  return 'unknown';
+}
 
 function sparkline(history) {
   if (!history || !history.length) return '<div class="sparkline"></div>';
-  return '<div class="sparkline">' +
-    history.map(ok => `<div class="spark-dot ${ok ? 'ok' : 'err'}"></div>`).join('') +
-    '</div>';
+  const isTimestamped = history.length > 0 && typeof history[0] === 'object';
+  if (!isTimestamped) {
+    return '<div class="sparkline">' +
+      history.map(ok => `<div class="spark-dot ${ok ? 'ok' : 'err'}"></div>`).join('') +
+      '</div>';
+  }
+  const now = Date.now();
+  const bucketMs = 5 * 60 * 1000;
+  const numBuckets = 12;
+  const dots = [];
+  for (let i = numBuckets - 1; i >= 0; i--) {
+    const start = now - (i + 1) * bucketMs;
+    const end   = now - i * bucketMs;
+    const entries = history.filter(e => { const t = new Date(e.ts).getTime(); return t >= start && t < end; });
+    const d = new Date(start);
+    const lbl = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+    const timeLabel = lbl + ' – ' + (() => { const e = new Date(end); return e.getHours() + ':' + String(e.getMinutes()).padStart(2,'0'); })();
+    const lblCls = i === 0 ? 'spark-lbl current' : 'spark-lbl';
+    if (!entries.length) {
+      dots.push(`<div class="spark-bucket"><div class="spark-dot" title="${timeLabel}: no data"></div><div class="${lblCls}">${lbl}</div></div>`);
+    } else {
+      const pct = entries.filter(e => e.ok).length / entries.length;
+      const cls = pct >= 0.8 ? 'ok' : pct >= 0.2 ? 'warn' : 'err';
+      const statusLabel = pct === 1 ? 'Online' : pct === 0 ? 'Offline' : `${Math.round(pct*100)}% online`;
+      dots.push(`<div class="spark-bucket"><div class="spark-dot ${cls}" title="${timeLabel}: ${statusLabel}"></div><div class="${lblCls}">${lbl}</div></div>`);
+    }
+  }
+  return '<div class="sparkline">' + dots.join('') + '</div>';
 }
 
 function formatMs(ms) {
@@ -116,7 +204,7 @@ function formatDuration(iso) {
 }
 
 function renderCloudCard(d) {
-  const sc = statusClass(d.status);
+  const sc = statusClass(d.status, false);
   return `
   <div class="cloud-card status-${sc}" id="card-${d.id}">
     <div class="cloud-card-header">
@@ -142,8 +230,11 @@ function renderCloudCard(d) {
 }
 
 function renderCard(d) {
-  const sc = statusClass(d.status);
+  const sc = statusClass(d.status, d.slowResponse);
   const host = d.type === 'ping' ? d.host : d.url;
+  const cardNotifs = allNotifications.filter(m => (m.title || '').includes(d.name));
+  const notifBadge = cardNotifs.length
+    ? `<span class="card-notif-badge">${cardNotifs.length}</span>` : '';
   return `
   <div class="device-card status-${sc}" id="card-${d.id}">
     <div class="device-card-header">
@@ -156,9 +247,14 @@ function renderCard(d) {
     <div class="device-card-body">
       <div class="status-row">
         <div class="status-dot ${sc}"></div>
-        <div class="status-text ${sc}">${sc === 'up' ? 'Online' : sc === 'down' ? 'Offline' : 'Unknown'}</div>
+        <div class="status-text ${sc}">${sc === 'up' ? 'Online' : sc === 'slow' ? 'Slow' : sc === 'down' ? 'Offline' : 'Unknown'}</div>
         <div class="status-msg">${escHtml(d.message || '')}</div>
       </div>
+      ${sc === 'slow' ? `
+      <div style="font-size:0.72rem;color:#fbbf24;margin-bottom:8px;display:flex;align-items:center;gap:5px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Response time over ${d.responseTimeThresholdMs}ms threshold
+      </div>` : ''}
       ${sc === 'down' && d.notifyAfterMinutes && !d.notifyDownSent ? `
       <div style="font-size:0.72rem;color:#fbbf24;margin-bottom:8px;display:flex;align-items:center;gap:5px;">
         <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -171,15 +267,45 @@ function renderCard(d) {
           ${sc === 'up' ? 'Up' : sc === 'down' ? 'Down' : 'Status'} for: <strong>${formatDuration(d.lastChange)}</strong>
         </div>` : ''}
         ${d.notifyAfterMinutes ? `<div class="meta-item">Alert after: <strong>${d.notifyAfterMinutes}m offline</strong></div>` : ''}
+        ${d.responseTimeThresholdMs ? `<div class="meta-item" style="${sc === 'slow' ? 'color:#fbbf24' : ''}">Slow if: <strong>&gt;${d.responseTimeThresholdMs}ms</strong></div>` : ''}
       </div>
       ${sparkline(d.history)}
     </div>
     <div class="device-card-actions">
-      <button class="btn btn-ghost btn-sm" onclick="checkNow('${d.id}', this)">
-        Check Now
+      <button class="btn btn-ghost btn-sm" onclick="checkNow('${d.id}', this)">Check Now</button>
+      <button class="btn btn-ghost btn-sm card-notif-toggle" onclick="toggleCardNotifs('${d.id}', this)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Alerts ${notifBadge}
+        <svg class="chevron" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
     </div>
+    <div class="card-notif-drawer" id="drawer-${d.id}" style="display:none;">
+      ${renderCardNotifs(cardNotifs)}
+    </div>
   </div>`;
+}
+
+function renderCardNotifs(msgs) {
+  if (!msgs.length) return '<div class="card-notif-empty">No alerts in last 12h</div>';
+  return msgs.map(m => {
+    const cls = notifClass(m.tags, m.title);
+    return `<div class="card-notif-row ${cls}">
+      <div class="card-notif-icon ${cls}">${notifIcon(cls)}</div>
+      <div class="card-notif-text">
+        ${m.title ? `<div class="card-notif-title">${escHtml(m.title)}</div>` : ''}
+        <div class="card-notif-msg">${escHtml(m.message || '')}</div>
+      </div>
+      <div class="card-notif-time">${fmtNotifTime(m.time)}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleCardNotifs(id, btn) {
+  const drawer = document.getElementById('drawer-' + id);
+  const chevron = btn.querySelector('.chevron');
+  const open = drawer.style.display === 'none';
+  drawer.style.display = open ? 'block' : 'none';
+  chevron.style.transform = open ? 'rotate(180deg)' : '';
 }
 
 function escHtml(s) {
@@ -224,18 +350,10 @@ async function loadStatus() {
     const up = monitored.filter(d => d.status === 'up').length;
     const down = monitored.filter(d => d.status === 'down').length;
     const unknown = monitored.filter(d => d.status === 'unknown').length;
-    // Uptime % from history across all monitored devices
-    const allChecks = monitored.flatMap(d => d.history || []);
-    const uptimePct = allChecks.length
-      ? Math.round((allChecks.filter(Boolean).length / allChecks.length) * 100)
-      : null;
-    const uptimeChip = document.getElementById('stat-uptime-chip');
     document.getElementById('stat-total').textContent = total;
     document.getElementById('stat-up').textContent = up;
     document.getElementById('stat-down').textContent = down;
     document.getElementById('stat-unknown').textContent = unknown;
-    document.getElementById('stat-uptime').textContent = uptimePct != null ? uptimePct + '%' : '—';
-    uptimeChip.className = 'stat-chip uptime' + (uptimePct === 100 ? ' up' : uptimePct != null && uptimePct < 80 ? ' down' : '');
     document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 
     // Detect status changes for toasts
@@ -268,12 +386,290 @@ async function loadStatus() {
   }
 }
 
+// ── Uptime (24h, duration-based) ─────────────────────────────────────────────
+
+async function loadUptime() {
+  try {
+    const { summary, deviceNames } = await fetch('/api/outages?days=1').then(r => r.json());
+    const windowMs = 24 * 60 * 60 * 1000;
+    const ids = Object.keys(deviceNames);
+    if (!ids.length) return;
+
+    // For each device, sum offline ms in last 24h
+    const today = new Date();
+    const dateKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    // Also include yesterday's partial window
+    const yesterday = new Date(Date.now() - 86400000);
+    const yKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
+
+    let totalOfflineMs = 0;
+    for (const id of ids) {
+      const dayData = summary[id] || {};
+      totalOfflineMs += (dayData[dateKey] || 0) + (dayData[yKey] || 0);
+    }
+
+    const totalWindowMs = ids.length * windowMs;
+    const uptimePctRaw = Math.max(0, ((totalWindowMs - totalOfflineMs) / totalWindowMs) * 100);
+    const uptimePct = uptimePctRaw === 100 ? '100%' : uptimePctRaw.toFixed(2) + '%';
+    const uptimePctNum = parseFloat(uptimePctRaw);
+
+    document.getElementById('stat-uptime').textContent = uptimePct;
+    const chip = document.getElementById('stat-uptime-chip');
+    chip.className = 'stat-chip uptime' + (uptimePctNum === 100 ? ' up' : uptimePctNum < 80 ? ' down' : '');
+    chip.title = 'Based on actual offline time in the last 24h';
+
+    // Total downtime across all devices
+    const dtEl = document.getElementById('stat-downtime');
+    const dtChip = document.getElementById('stat-downtime-chip');
+    if (totalOfflineMs === 0) {
+      dtEl.textContent = 'None';
+      dtChip.className = 'stat-chip up';
+    } else {
+      dtEl.textContent = fmtMs(totalOfflineMs);
+      dtChip.className = 'stat-chip' + (totalOfflineMs > 3600000 ? ' down' : '');
+    }
+  } catch {
+    document.getElementById('stat-uptime').textContent = '—';
+    document.getElementById('stat-downtime').textContent = '—';
+  }
+}
+
+function fmtMs(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  if (d > 0) return `${d}d ${h % 24}h`;
+  if (h > 0) return `${h}h ${m % 60}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
+}
+
+// ── Downtime Summary Table ────────────────────────────────────────────────────
+
+async function loadDowntimeSummary() {
+  try {
+    const { summary, deviceNames } = await fetch('/api/outages?days=30').then(r => r.json());
+    const el = document.getElementById('downtime-summary');
+    const ids = Object.keys(deviceNames);
+    if (!ids.length) {
+      el.innerHTML = '<div class="empty-state" style="padding:24px 20px;"><p>No devices found.</p></div>';
+      return;
+    }
+
+    const now = Date.now();
+    const weekCutoff  = now - 7  * 86400000;
+    const monthCutoff = now - 30 * 86400000;
+
+    function sumOffline(deviceId, cutoffMs) {
+      const dayData = summary[deviceId] || {};
+      let total = 0;
+      for (const [dateStr, ms] of Object.entries(dayData)) {
+        const [y, mo, d] = dateStr.split('-').map(Number);
+        const dayStart = new Date(y, mo - 1, d).getTime();
+        if (dayStart + 86400000 >= cutoffMs) total += ms;
+      }
+      return total;
+    }
+
+    function uptimePct(offlineMs, windowMs) {
+      const pct = Math.max(0, ((windowMs - offlineMs) / windowMs) * 100);
+      const display = pct === 100 ? '100%' : pct.toFixed(2) + '%';
+      const cls = pct >= 99.9 ? 'color:#22c55e' : pct < 90 ? 'color:#f87171' : 'color:#fbbf24';
+      return `<span style="${cls};font-weight:700">${display}</span>`;
+    }
+
+    function dtCell(ms) {
+      if (!ms) return '<span style="color:#334155;">—</span>';
+      const cls = ms > 3600000 ? 'color:#f87171' : ms > 600000 ? 'color:#fbbf24' : 'color:#94a3b8';
+      return `<span style="${cls}">${fmtMs(ms)}</span>`;
+    }
+
+    let html = `
+    <table style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:10px 16px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;border-bottom:1px solid rgba(255,255,255,0.06);">Device</th>
+          <th style="padding:10px 16px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;border-bottom:1px solid rgba(255,255,255,0.06);">7d Downtime</th>
+          <th style="padding:10px 16px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;border-bottom:1px solid rgba(255,255,255,0.06);">7d Uptime</th>
+          <th style="padding:10px 16px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;border-bottom:1px solid rgba(255,255,255,0.06);">30d Downtime</th>
+          <th style="padding:10px 16px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;border-bottom:1px solid rgba(255,255,255,0.06);">30d Uptime</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+    for (const id of ids) {
+      const name = deviceNames[id] || id;
+      const w  = sumOffline(id, weekCutoff);
+      const mo = sumOffline(id, monthCutoff);
+      html += `
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+          <td style="padding:11px 16px;font-size:0.82rem;font-weight:600;color:#e2e8f0;">${escHtml(name)}</td>
+          <td style="padding:11px 16px;font-size:0.82rem;text-align:center;">${dtCell(w)}</td>
+          <td style="padding:11px 16px;font-size:0.82rem;text-align:center;">${uptimePct(w,  7 * 86400000)}</td>
+          <td style="padding:11px 16px;font-size:0.82rem;text-align:center;">${dtCell(mo)}</td>
+          <td style="padding:11px 16px;font-size:0.82rem;text-align:center;">${uptimePct(mo, 30 * 86400000)}</td>
+        </tr>`;
+    }
+
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch {
+    document.getElementById('downtime-summary').innerHTML =
+      '<div class="empty-state" style="padding:24px 20px;"><p>Could not load downtime data.</p></div>';
+  }
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+function notifClass(tags, title) {
+  const t = (title || '').toLowerCase();
+  const tagList = tags || [];
+  if (tagList.includes('rotating_light') || t.includes('offline') || t.includes('down')) return 'notif-down';
+  if (tagList.includes('white_check_mark') || t.includes('online') || t.includes('back')) return 'notif-up';
+  return 'notif-other';
+}
+
+function notifIcon(cls) {
+  if (cls === 'notif-down') return `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+  if (cls === 'notif-up')   return `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+}
+
+function fmtNotifTime(unixSec) {
+  const d = new Date(unixSec * 1000);
+  const diff = Math.floor((Date.now() - d) / 1000);
+  if (diff < 60)   return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+async function loadNotifications() {
+  try {
+    const settings = await fetch('/api/settings').then(r => r.json());
+    const topic = settings.ntfyTopic;
+    const server = settings.ntfyServer || 'https://ntfy.sh';
+    if (!topic) {
+      document.getElementById('notif-list').innerHTML =
+        '<div class="empty-state" style="padding:24px 20px;"><p>No ntfy topic configured.</p></div>';
+      return;
+    }
+
+    const res = await fetch(`${server}/${topic}/json?poll=1&since=12h`, {
+      headers: { Accept: 'application/x-ndjson' }
+    });
+    const text = await res.text();
+    const messages = text.trim().split('\n')
+      .filter(Boolean)
+      .map(line => { try { return JSON.parse(line); } catch { return null; } })
+      .filter(m => m && m.event === 'message')
+      .reverse(); // newest first
+
+    const listEl = document.getElementById('notif-list');
+    const statusEl = document.getElementById('notif-status');
+
+    if (!messages.length) {
+      listEl.innerHTML = '<div class="empty-state" style="padding:24px 20px;"><p>No notifications in the last 12 hours.</p></div>';
+      statusEl.textContent = '';
+      return;
+    }
+
+    allNotifications = messages;
+    statusEl.textContent = `${messages.length} in last 12h`;
+    listEl.innerHTML = messages.map(m => {
+      const cls = notifClass(m.tags, m.title);
+      return `
+      <div class="notif-item ${cls}">
+        <div class="notif-icon ${cls}">${notifIcon(cls)}</div>
+        <div class="notif-body">
+          ${m.title ? `<div class="notif-title">${escHtml(m.title)}</div>` : ''}
+          <div class="notif-msg">${escHtml(m.message || '')}</div>
+        </div>
+        <div class="notif-time">${fmtNotifTime(m.time)}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('notif-list').innerHTML =
+      '<div class="empty-state" style="padding:24px 20px;"><p>Could not load notifications.</p></div>';
+  }
+}
+
+// ── Locked AD Accounts ────────────────────────────────────────────────────────
+
+async function loadLockedAccounts() {
+  const card = document.getElementById('locked-accounts-card');
+  const iconEl = document.getElementById('locked-icon');
+  const bodyEl = document.getElementById('locked-body');
+  const updEl = document.getElementById('locked-updated');
+  try {
+    const data = await fetch('/api/locked-accounts').then(r => r.json());
+    if (data.enabled === false) { card.style.display = 'none'; return; }
+    card.style.display = 'flex';
+    updEl.textContent = data.checkedAt ? 'checked ' + timeAgo(data.checkedAt) : '';
+
+    if (data.error) {
+      card.style.borderColor = 'rgba(251,191,36,0.4)';
+      iconEl.style.color = '#fbbf24';
+      bodyEl.innerHTML = `<span style="color:#fbbf24;">Could not query AD:</span> ${escHtml(data.error)}`;
+      return;
+    }
+    const accts = data.accounts || [];
+    if (!accts.length) {
+      card.style.borderColor = 'rgba(22,183,75,0.35)';
+      card.style.background = 'rgba(5,46,22,0.28)';
+      iconEl.style.color = '#22c55e';
+      bodyEl.innerHTML = '<span style="color:#22c55e;font-weight:600;">No locked accounts</span>';
+      return;
+    }
+    card.style.borderColor = 'rgba(220,38,38,0.5)';
+    card.style.background = 'rgba(127,29,29,0.25)';
+    iconEl.style.color = '#f87171';
+    bodyEl.innerHTML =
+      `<div style="color:#f87171;font-weight:700;margin-bottom:6px;">${accts.length} locked account${accts.length > 1 ? 's' : ''}</div>` +
+      accts.map(a => `<div style="display:flex;gap:10px;flex-wrap:wrap;padding:3px 0;">
+        <span style="font-weight:600;color:#e2e8f0;">${escHtml(a.name || a.sam)}</span>
+        <span style="color:#94a3b8;font-family:monospace;">${escHtml(a.sam)}</span>
+        ${a.lockoutTime ? `<span style="color:#64748b;">locked ${timeAgo(a.lockoutTime)}</span>` : ''}
+      </div>`).join('');
+  } catch {
+    card.style.display = 'flex';
+    bodyEl.textContent = 'Could not load locked account data.';
+  }
+}
+
+// ── Public IP / ISP ───────────────────────────────────────────────────────────
+
+async function loadIpInfo() {
+  try {
+    const data = await fetch('https://ipapi.co/json/').then(r => r.json());
+    document.getElementById('ip-addr').textContent = data.ip || '—';
+    document.getElementById('ip-isp').textContent  = data.org || data.asn || '—';
+    const loc = [data.city, data.region].filter(Boolean).join(', ');
+    document.getElementById('ip-location').textContent = loc;
+    document.getElementById('ip-updated').textContent  = 'as of ' + new Date().toLocaleTimeString();
+  } catch {
+    document.getElementById('ip-isp').textContent = 'Could not fetch IP info';
+  }
+}
+
 // Initial load + auto-refresh every 30s
 loadStatus();
+loadUptime();
+loadDowntimeSummary();
+loadNotifications();
+loadIpInfo();
+loadLockedAccounts();
 const INTERVAL = 30000;
 let countdown = INTERVAL / 1000;
 const indicator = document.getElementById('refresh-indicator');
 setInterval(loadStatus, INTERVAL);
+setInterval(loadUptime, INTERVAL);
+setInterval(loadDowntimeSummary, INTERVAL);
+setInterval(loadNotifications, INTERVAL);
+setInterval(loadLockedAccounts, INTERVAL);
+setInterval(loadIpInfo, 5 * 60 * 1000);
 setInterval(() => {
   countdown--;
   if (countdown <= 0) countdown = INTERVAL / 1000;

@@ -4,6 +4,7 @@ const ping = require('ping');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 
 const app = express();
 const PORT = 3000;
@@ -11,6 +12,8 @@ const DATA_DIR = path.join(__dirname, 'data');
 const EQUIPMENT_FILE = path.join(DATA_DIR, 'equipment.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const OUTAGES_FILE = path.join(DATA_DIR, 'outages.json');
+const LOCKED_FILE = path.join(DATA_DIR, 'locked-accounts.json');
+const DEFAULT_LOCKED_OU = 'OU=Centreville Users,OU=StJoeCMH,DC=stjoecmh,DC=org';
 // ── Supabase sync ─────────────────────────────────────────────────────────────
 
 async function syncToSupabase(deviceId) {
@@ -37,6 +40,7 @@ async function syncToSupabase(deviceId) {
     history: status.history || [],
     notify_after_minutes: device.notifyAfterMinutes || 0,
     notify_down_sent: status.notifyDownSent || false,
+    slow_response: status.slowResponse || false,
     agent_heartbeat: new Date().toISOString(),
   };
 
@@ -99,16 +103,18 @@ async function pollCloudDevices() {
       { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
     );
     for (const row of res.data) {
+      if (!row.status || row.status === 'unknown') continue;
+      // Restore history into statusMap before calling updateStatus so it isn't lost
       const prev = statusMap[row.id];
-      statusMap[row.id] = {
-        id: row.id,
-        status: row.status || 'unknown',
-        responseTime: row.response_time,
-        lastCheck: row.last_check,
-        lastChange: row.last_change,
-        message: row.message || '',
-        history: row.history || (prev ? prev.history : []),
-      };
+      if (row.history && row.history.length) {
+        if (!statusMap[row.id]) statusMap[row.id] = {};
+        statusMap[row.id].history = row.history;
+      } else if (prev && prev.history) {
+        if (!statusMap[row.id]) statusMap[row.id] = {};
+        statusMap[row.id].history = prev.history;
+      }
+      updateStatus(row.id, row.status, row.response_time, row.message || '');
+      await syncToSupabase(row.id);
     }
   } catch (err) {
     console.error('Cloud device poll error:', err.message);
@@ -212,11 +218,9 @@ function updateStatus(id, newStatus, responseTime, message) {
 
   if (newStatus === 'down') {
     if (prevStatus !== 'down') {
-      // Freshly went down — start the clock
       downSince = now;
       notifyDownSent = false;
     }
-    // Send alert only once the threshold is exceeded (0 = immediately)
     if (!notifyDownSent && prevStatus !== 'unknown' && (now - downSince) >= thresholdMs) {
       notifyDownSent = true;
       sendNtfy(id, 'down');
@@ -230,6 +234,30 @@ function updateStatus(id, newStatus, responseTime, message) {
     notifyDownSent = false;
   }
 
+  // Track slow response time
+  const rtThresholdMs = (device && device.responseTimeThresholdMs) || 0;
+  const rtThresholdDurationMs = ((device && device.responseTimeThresholdMinutes) || 0) * 60 * 1000;
+  let slowSince = prev ? prev.slowSince : null;
+  let notifySlowSent = prev ? prev.notifySlowSent : false;
+  let slowResponse = false;
+
+  if (rtThresholdMs > 0 && newStatus === 'up' && responseTime != null && responseTime > rtThresholdMs) {
+    if (!slowSince) {
+      slowSince = now;
+      notifySlowSent = false;
+    }
+    if (!notifySlowSent && (now - slowSince) >= rtThresholdDurationMs) {
+      notifySlowSent = true;
+      sendNtfy(id, 'slow');
+    }
+    slowResponse = true;
+  } else {
+    if (slowSince && notifySlowSent) sendNtfy(id, 'fast');
+    slowSince = null;
+    notifySlowSent = false;
+    slowResponse = false;
+  }
+
   statusMap[id] = {
     id,
     status: newStatus,
@@ -240,6 +268,9 @@ function updateStatus(id, newStatus, responseTime, message) {
     history,
     downSince,
     notifyDownSent,
+    slowSince,
+    notifySlowSent,
+    slowResponse,
   };
 }
 
@@ -254,24 +285,131 @@ async function sendNtfy(deviceId, newStatus) {
   const topic = device.ntfyTopic || settings.ntfyTopic;
   if (!topic) return;
 
-  const server = settings.ntfyServer || 'https://ntfy.sh';
-  const title = newStatus === 'up'
-    ? `${device.name} is BACK ONLINE`
-    : `${device.name} is OFFLINE`;
+  const title = newStatus === 'up'   ? `${device.name} is BACK ONLINE`
+    : newStatus === 'down' ? `${device.name} is OFFLINE`
+    : newStatus === 'slow' ? `${device.name} response is SLOW`
+    :                        `${device.name} response is BACK TO NORMAL`;
   const body = `Host: ${device.host || device.url}\nTime: ${new Date().toLocaleString()}`;
-  const cloudUrl = 'https://markbritton-hue.github.io/systemmonitor/';
 
+  await sendNtfyRaw(title, body, {
+    topic,
+    priority: (newStatus === 'down' || newStatus === 'slow') ? 'high' : 'default',
+    tags: newStatus === 'down' ? 'rotating_light' : newStatus === 'slow' ? 'warning' : 'white_check_mark',
+  });
+}
+
+// Low-level ntfy poster reused for device alerts and directory alerts
+async function sendNtfyRaw(title, body, { topic, priority = 'default', tags = '' } = {}) {
+  const settings = loadSettings();
+  const dest = topic || settings.ntfyTopic;
+  if (!dest) return;
+  const server = settings.ntfyServer || 'https://ntfy.sh';
+  const cloudUrl = 'https://markbritton-hue.github.io/systemmonitor/';
   try {
-    await axios.post(`${server}/${topic}`, body, {
-      headers: {
-        Title: title,
-        Priority: newStatus === 'down' ? 'max' : 'default',
-        Tags: newStatus === 'down' ? 'rotating_light' : 'white_check_mark',
-        Click: cloudUrl,
-      },
+    await axios.post(`${server}/${dest}`, body, {
+      headers: { Title: title, Priority: priority, Tags: tags, Click: cloudUrl },
     });
   } catch (err) {
-    console.error(`ntfy send failed for ${device.name}:`, err.message);
+    console.error(`ntfy send failed (${title}):`, err.message);
+  }
+}
+
+// ── Locked AD accounts ────────────────────────────────────────────────────────
+
+let lockedCache = { data: null, at: 0 };
+const LOCKED_CACHE_MS = 5 * 60 * 1000;
+
+function queryLockedAccounts(ouDn) {
+  // Uses .NET DirectoryServices (built into Windows, no RSAT needed).
+  // One-level scope: direct children of the OU only.
+  const script = `
+$ErrorActionPreference = 'Stop'
+try {
+  $ds = New-Object DirectoryServices.DirectorySearcher
+  $ds.SearchRoot = [ADSI]("LDAP://" + ${JSON.stringify(ouDn)})
+  $ds.SearchScope = 'OneLevel'
+  $ds.PageSize = 1000
+  $ds.Filter = '(&(objectCategory=person)(objectClass=user))'
+  [void]$ds.PropertiesToLoad.AddRange(@('samaccountname','displayname','lockouttime','distinguishedname'))
+  $locked = foreach ($r in $ds.FindAll()) {
+    $u = $r.GetDirectoryEntry()
+    $u.RefreshCache(@('msDS-User-Account-Control-Computed'))
+    $c = [int]($u.Properties['msDS-User-Account-Control-Computed'][0])
+    if ($c -band 0x10) {
+      $lt = $r.Properties['lockouttime']
+      $ltIso = $null
+      if ($lt.Count -gt 0 -and [int64]$lt[0] -gt 0) { $ltIso = ([datetime]::FromFileTimeUtc([int64]$lt[0])).ToString('o') }
+      [pscustomobject]@{
+        sam = [string]$r.Properties['samaccountname'][0]
+        name = [string]$r.Properties['displayname'][0]
+        lockoutTime = $ltIso
+      }
+    }
+  }
+  @($locked) | ConvertTo-Json -Compress
+} catch {
+  [pscustomobject]@{ error = $_.Exception.Message } | ConvertTo-Json -Compress
+}
+`;
+  return new Promise((resolve) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
+      { timeout: 60000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
+      (err, stdout) => {
+        if (err && !stdout) return resolve({ error: err.message });
+        const out = (stdout || '').trim();
+        if (!out) return resolve({ accounts: [] });
+        let parsed;
+        try { parsed = JSON.parse(out); } catch { return resolve({ error: 'Could not parse AD query output' }); }
+        if (parsed && parsed.error) return resolve({ error: parsed.error });
+        const accounts = Array.isArray(parsed) ? parsed : [parsed];
+        resolve({ accounts });
+      });
+  });
+}
+
+async function refreshLockedAccounts(force = false) {
+  const settings = loadSettings();
+  if (settings.lockedAccountsEnabled === false) {
+    lockedCache = { data: { enabled: false }, at: Date.now() };
+    return lockedCache.data;
+  }
+  if (!force && lockedCache.data && (Date.now() - lockedCache.at) < LOCKED_CACHE_MS) {
+    return lockedCache.data;
+  }
+  const ou = settings.lockedAccountsOU || DEFAULT_LOCKED_OU;
+  const res = await queryLockedAccounts(ou);
+  const data = {
+    enabled: true,
+    ou,
+    checkedAt: new Date().toISOString(),
+    error: res.error || null,
+    accounts: res.accounts || [],
+  };
+  lockedCache = { data, at: Date.now() };
+  if (!res.error) notifyNewLockouts(data.accounts, ou);
+  return data;
+}
+
+function loadKnownLocked() {
+  try {
+    return JSON.parse(fs.readFileSync(LOCKED_FILE, 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+function notifyNewLockouts(accounts, ou) {
+  const prev = new Set(loadKnownLocked());
+  const current = accounts.map(a => a.sam).filter(Boolean);
+  for (const acct of accounts) {
+    if (!acct.sam || prev.has(acct.sam)) continue;
+    const body = `Account: ${acct.name || acct.sam} (${acct.sam})\nOU: ${ou}\nTime: ${new Date().toLocaleString()}`;
+    sendNtfyRaw(`AD account LOCKED: ${acct.name || acct.sam}`, body, { priority: 'high', tags: 'lock' });
+  }
+  try {
+    fs.writeFileSync(LOCKED_FILE, JSON.stringify(current, null, 2));
+  } catch (err) {
+    console.error('Could not write locked-accounts state:', err.message);
   }
 }
 
@@ -438,6 +576,8 @@ async function startMonitoring() {
   setInterval(checkCloudHeartbeat, 20 * 1000);
   pollCloudDevices();
   setInterval(pollCloudDevices, 60 * 1000);
+  refreshLockedAccounts(true).catch(err => console.error('Locked account check failed:', err.message));
+  setInterval(() => refreshLockedAccounts(true).catch(err => console.error('Locked account check failed:', err.message)), 5 * 60 * 1000);
 }
 
 function rescheduleAll() {
@@ -472,6 +612,8 @@ app.post('/api/equipment', (req, res) => {
     expectedContent: req.body.expectedContent || '',
     intervalSeconds: Number(req.body.intervalSeconds) || settings.defaultInterval || 15,
     notifyAfterMinutes: Number(req.body.notifyAfterMinutes) || 0,
+    responseTimeThresholdMs: Number(req.body.responseTimeThresholdMs) || 0,
+    responseTimeThresholdMinutes: Number(req.body.responseTimeThresholdMinutes) || 0,
     ntfyTopic: req.body.ntfyTopic || '',
     pingSource: req.body.pingSource || 'local',
     enabled: req.body.enabled !== false,
@@ -565,6 +707,16 @@ app.post('/api/settings', (req, res) => {
   const updated = { ...current, ...req.body };
   saveSettings(updated);
   res.json(updated);
+});
+
+// Locked AD accounts
+app.get('/api/locked-accounts', async (req, res) => {
+  try {
+    const data = await refreshLockedAccounts(req.query.force === '1');
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ enabled: true, accounts: [], error: err.message });
+  }
 });
 
 // Outage history
