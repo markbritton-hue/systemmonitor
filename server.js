@@ -121,6 +121,38 @@ async function pollCloudDevices() {
   }
 }
 
+async function syncAdAccountsToSupabase(data) {
+  const settings = loadSettings();
+  const { supabaseUrl, supabaseKey } = settings;
+  if (!supabaseUrl || !supabaseKey) return;
+  try {
+    await axios.post(
+      `${supabaseUrl}/rest/v1/meta`,
+      {
+        key: 'ad_accounts',
+        value: JSON.stringify({
+          ou: data.ou,
+          checkedAt: data.checkedAt,
+          error: data.error || null,
+          locked: data.accounts || [],
+          disabled: data.disabled || [],
+        }),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+      }
+    );
+  } catch (err) {
+    console.error('Supabase AD accounts sync error:', err.response?.data?.message || err.message);
+  }
+}
+
 async function deleteFromSupabase(deviceId) {
   const settings = loadSettings();
   const { supabaseUrl, supabaseKey } = settings;
@@ -396,6 +428,7 @@ async function refreshLockedAccounts(force = false) {
   };
   lockedCache = { data, at: Date.now() };
   if (!res.error) notifyNewLockouts(data.accounts, ou);
+  syncAdAccountsToSupabase(data);
   return data;
 }
 
